@@ -149,7 +149,45 @@ app.use(express.static('styles'));
             from: '"hackathon.photos" <noreply@hackathon.photos>',
             to: email,
             subject: "Confirm your photo order",
-            text: `Hi! Before we confirm your order, we need you to confirm your E-mail address.\n\n https://hackathon.photos/confirm/${id}.\n If you've changed your mind or didn't place this order, you can safely ignore this E-mail.`,
+            text: `Hi ${name} ${surname},
+Before we send your order to Walgreens, we need you to confirm your E-mail address.
+You may do so here: https://hackathon.photos/confirm/${id}
+
+You have a total of ${photos.length} photo(s) pending that will be ready at ${promiseTime} if you confirm now.
+
+N.B. You will pay at the store.`,
+            html: `<style>
+        body {
+            font-family: system-ui, sans-serif;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        p {
+            line-height: 1.5em;
+        }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+        }
+        .gallery img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        @media (max-width: 600px) {
+            .gallery {
+                grid-template-columns: 1fr;
+            }
+        }
+        <h1>Confirm your photo order</h1>
+        <p>Hi ${name} ${surname},</p><p>Before we send your order to Walgreens, we need you to confirm your E-mail address.</p>
+        <h2>Photos</h2>
+        <div class="gallery">
+        ${photos.map(photo=>`<a href="${photo}" target="_blank"><img src="${photo}" alt="${photo}"/></a>`)}
+        </div>
+        <p>N.B. You will pay at the store.</p>`
         });
         res.json({ message: 'Order submitted successfully! Check your E-mail.' });
     });

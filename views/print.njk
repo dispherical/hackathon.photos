@@ -1,7 +1,11 @@
 {% extends "parent.njk" %}
-<script src="https://cdn.jsdelivr.net/npm/@tarekraafat/autocomplete.js@10.2.9/dist/autoComplete.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tarekraafat/autocomplete.js@10.2.9/dist/css/autoComplete.min.css">
 {% block main %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
     <h2>Printing from {{ title }}</h2>
     <details>
         <summary>Select Photos</summary>
@@ -15,7 +19,6 @@
                 <th>Actions</th>
             </tr>
 
-            <summary>Select Photos</summary>
             {% for photo in photos %}
                 <tr>
                     <td>
@@ -35,7 +38,7 @@
     </details>
     <h2>Order</h2>
     <p id="order-cost">Your order will be about $0.00</p>
-
+    <input type="hidden" id="tax-percentage" value="0">
     <label>Name</label>
     <input type="text" name="name" placeholder="John"/>
     <label>Surname</label>
@@ -50,16 +53,36 @@
     <select id="store-select">
         <option value="">Select a store</option>
     </select>
+    <div id="map" style="height: 400px;"></div>
     <div id="store-details"></div>
     <p><input type="checkbox" name="agree1"> I acknowledge that I have read, understand and agree to be bound by the Walgreens <a href="https://www.walgreens.com/topic/help/generalhelp/termsofuse.jsp">Terms of Use</a> and <a href="https://www.walgreens.com/topic/help/generalhelp/privacyandsecurity.jsp">Online Privacy &amp; Security Policy</a>.</p>
-    <p><input type="checkbox" name="agree2">I'm aware the total I will pay is an estimate, comes before taxes, and will be paid at Walgreens.</p>
+    <p><input type="checkbox" name="agree2">I'm aware the total I will pay is an estimate, comes after taxes (if available), and will be paid at Walgreens.</p>
     <button id="order" disabled="true" onclick="submit()">Order</button>
     <script>
+        let map;
+        let markers = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            map = L
+                .map('map')
+                .setView([
+                    37.7749, -122.4194
+                ], 13); // Default to San Francisco
+
+            L
+                .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'})
+                .addTo(map);
+        });
+
         async function lookupStores(query) {
             const response = await fetch(`/api/lookup?q=${query}`);
             const data = await response.json();
             const storeSelect = document.querySelector('#store-select');
             storeSelect.innerHTML = '';
+
+            // Clear existing markers
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
 
             data
                 .photoStores
@@ -69,21 +92,49 @@
                     option.text = `${store.photoStoreDetails.storeName} - ${store.photoStoreDetails.street}, ${store.photoStoreDetails.city}, ${store.photoStoreDetails.state}`;
                     option.dataset.details = JSON.stringify(store.photoStoreDetails);
                     storeSelect.appendChild(option);
+
+                    // Add marker to map
+                    const marker = L
+                        .marker([store.photoStoreDetails.latitude, store.photoStoreDetails.longitude])
+                        .addTo(map)
+                        .bindPopup(`<b>${store.photoStoreDetails.storeName}</b><br>${store.photoStoreDetails.street}, ${store.photoStoreDetails.city}, ${store.photoStoreDetails.state}`);
+                    marker.on('click', () => {
+                        storeSelect.value = store.photoStoreDetails.storeNum;
+                        displayStoreDetails(store.photoStoreDetails);
+                        updateOrderCost();
+                    });
+                    markers.push(marker);
                 });
+
+            if (data.photoStores.length === 1) {
+                storeSelect.selectedIndex = 0;
+                const details = JSON.parse(storeSelect.options[0].dataset.details);
+                displayStoreDetails(details);
+                updateOrderCost();
+            }
+            if (markers.length > 0) {
+                const group = new L.featureGroup(markers);
+                map.fitBounds(group.getBounds());
+            }
         }
 
         function displayStoreDetails(details) {
             const storeDetails = document.querySelector('#store-details');
             storeDetails.innerHTML = `
-            <p><strong>Store Name:</strong> ${details.storeName}</p>
-            <p><strong>Address:</strong> ${details.street}, ${details.city}, ${details.state}, ${details.zip}</p>
-            <p><strong>Phone:</strong> ${details.phone}</p>
-            <p><strong>Open Time:</strong> ${details.openTime}</p>
-            <p><strong>Close Time:</strong> ${details.closeTime}</p>
-            <p><strong>Promise Time:</strong> ${details.promiseTime}</p>
-            <p><strong>Distance:</strong> ${details.distance} ${details.distanceUnit}</p>
-        `;
+    <p><strong>Store Name:</strong> ${details.storeName}</p>
+    <p><strong>Address:</strong> ${details.street}, ${details.city}, ${details.state}, ${details.zip}</p>
+    <p><strong>Phone:</strong> ${details.phone}</p>
+    <p><strong>Open Time:</strong> ${details.openTime}</p>
+    <p><strong>Close Time:</strong> ${details.closeTime}</p>
+    <p><strong>Promise Time:</strong> ${details.promiseTime}</p>
+    <p><strong>Distance:</strong> ${details.distance} ${details.distanceUnit}</p>
+    `;
+
+            document
+                .querySelector('#tax-percentage')
+                .value = details.tax || 0;
         }
+
         function downloadPhoto(id, photo) {
             const link = document.createElement('a');
             link.href = `/${id}/${photo}`;
@@ -117,16 +168,27 @@
             });
             return selectedPhotos;
         }
+
         function updateOrderCost() {
             const selectedPhotos = getSelectedPhotos();
             const costPerPhoto = 0.33;
             const totalCost = selectedPhotos.length * costPerPhoto;
+
+            let taxPercentage = 0;
+            const taxPercentageElement = document.querySelector('#tax-percentage');
+            if (taxPercentageElement) 
+                taxPercentage = parseFloat(taxPercentageElement.value) / 100;
+            
+            const totalCostWithTax = totalCost + (totalCost * taxPercentage);
+
             document
                 .getElementById('order-cost')
-                .innerText = `Your order will be about $${totalCost.toFixed(2)}`;
+                .innerText = `Your order will be about $${totalCostWithTax.toFixed(2)}`;
         }
+
         document.addEventListener('DOMContentLoaded', () => {
-            var checkboxes = document.querySelectorAll('.photo-checkbox');
+
+            const checkboxes = document.querySelectorAll('.photo-checkbox');
             const orderButton = document.querySelector("#order");
 
             function updateOrderButtonState() {
@@ -135,7 +197,10 @@
                     .some(checkbox => checkbox.checked);
                 orderButton.disabled = !anyChecked;
             }
-
+            setInterval(function () {
+                updateOrderCost()
+                updateOrderButtonState()
+            }, 500)
             updateOrderButtonState();
 
             checkboxes.forEach(checkbox => {
@@ -143,6 +208,23 @@
                     updateOrderCost();
                     updateOrderButtonState();
                 });
+            });
+
+            const storeInput = document.querySelector('#store-input');
+            const searchButton = document.querySelector('#search-button');
+            const storeSelect = document.querySelector('#store-select');
+
+            searchButton.addEventListener('click', () => {
+                lookupStores(storeInput.value);
+            });
+
+            storeSelect.addEventListener('change', () => {
+                const selectedOption = storeSelect.options[storeSelect.selectedIndex];
+                if (selectedOption && selectedOption.dataset.details) {
+                    const details = JSON.parse(selectedOption.dataset.details);
+                    displayStoreDetails(details);
+                    updateOrderCost();
+                }
             });
         });
 
@@ -189,36 +271,33 @@
             fetch("/api/submit?" + params.toString())
                 .then(response => response.json())
                 .then(data => {
-                    if (data.error) 
-                        return alert(data.error);
+                    if (data.error) {
+                        alert(data.error)
+                        document
+                            .querySelector("#order")
+                            .disabled = false;
+                        document
+                            .querySelector("#order")
+                            .innerText = "Order";
+                        return;
+                    };
                     alert(data.message || "Check your E-mail to finish your order.");
                     document
                         .querySelector("#order")
                         .disabled = false;
+                    document
+                        .querySelector("#order")
+                        .innerText = "Order";
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    alert("Something went wrong. Try again.")
                     document
                         .querySelector("#order")
                         .disabled = false;
+                    document
+                        .querySelector("#order")
+                        .innerText = "Order";
                 });
         }
-        document.addEventListener('DOMContentLoaded', () => {
-            const storeInput = document.querySelector('#store-input');
-            const searchButton = document.querySelector('#search-button');
-            const storeSelect = document.querySelector('#store-select');
-
-            searchButton.addEventListener('click', () => {
-                lookupStores(storeInput.value);
-            });
-
-            storeSelect.addEventListener('change', () => {
-                const selectedOption = storeSelect.options[storeSelect.selectedIndex];
-                if (selectedOption && selectedOption.dataset.details) {
-                    const details = JSON.parse(selectedOption.dataset.details);
-                    displayStoreDetails(details);
-                }
-            });
-        });
     </script>
 {% endblock %}
