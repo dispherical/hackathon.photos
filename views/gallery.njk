@@ -18,6 +18,7 @@
         }
     </style>
     <h2>Gallery for {{ title }}</h2>
+    <p>Want to print them out? <a href="/order/{{ id }}">Click here to order from Walgreens</a>.</p>
     <div class="gallery">
         {% for photo in photos %}
             <a href="/{{ id }}/{{ photo }}" target="_blank">
