@@ -1,5 +1,11 @@
 {% extends "parent.njk" %}
 {% block main %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
     <style>
         .gallery {
             display: grid;
@@ -16,9 +22,16 @@
                 grid-template-columns: 1fr;
             }
         }
+        #map {
+            height: 400px;
+            margin-bottom: 20px;
+        }
     </style>
     <h2>Gallery for {{ title }}</h2>
     <p>Want to print them out? <a href="/order/{{ id }}">Click here to order from Walgreens</a>.</p>
+    <h2>Map</h2>
+    <div id="map"></div>
+    <h2>Gallery</h2>
     <div class="gallery">
         {% for photo in photos %}
             <a href="/{{ id }}/{{ photo }}" target="_blank">
@@ -28,4 +41,39 @@
             <p>No photos! Why not add some?</p>
         {% endfor %}
     </div>
+    <script>
+        fetch("/{{ id }}/exif.json")
+            .then(response => response.json())
+            .then(data => {
+                data.sort((a, b) => a.date - b.date);
+
+                const map = L
+                    .map('map')
+                    .setView([
+                        data[0].lat,
+                        data[0].lon
+                    ], 13);
+
+                L
+                    .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                        maxZoom: 21
+                    })
+                    .addTo(map);
+
+                const latlngs = [];
+                data.forEach(photo => {
+                    const marker = L
+                        .marker([photo.lat, photo.lon])
+                        .addTo(map);
+                    marker.bindPopup(`<a href="/{{ id }}/${photo.image}" target="_blank"><img src="/{{ id }}/${photo.image}" alt="" style="width: auto; height: auto;"></a>`);
+                    latlngs.push([photo.lat, photo.lon]);
+                });
+
+                L
+                    .polyline(latlngs, {color: 'blue'})
+                    .addTo(map);
+            })
+            .catch(error => console.error('Error fetching EXIF data:', error));
+    </script>
 {% endblock %}

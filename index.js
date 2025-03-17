@@ -42,7 +42,7 @@ app.use(express.static('styles'));
     server.afterRequest((arg, next) => {
         next();
     });
-
+    setInterval(function () { require("./exif") }, 10 * 1000)
     app.use(webdav.extensions.express("/webdav", server));
     const env = nunjucks.configure('views', {
         autoescape: true,
@@ -186,7 +186,7 @@ N.B. You will pay at the store.`,
         <p>Hi ${name} ${surname},</p><p>Before we send your order to Walgreens, we need you to confirm your E-mail address.</p>
         <h2>Photos</h2>
         <div class="gallery">
-        ${photos.map(photo=>`<a href="${photo}" target="_blank"><img src="${photo}" alt="${photo}"/></a>`)}
+        ${photos.map(photo => `<a href="${photo}" target="_blank"><img src="${photo}" alt="${photo}"/></a>`)}
         </div>
         <p>N.B. You will pay at the store.</p>`
         });

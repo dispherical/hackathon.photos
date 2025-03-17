@@ -7,6 +7,7 @@
   "dependencies": {
     "@prisma/client": "^6.5.0",
     "dotenv": "^16.4.7",
+    "exif-parser": "^0.1.12",
     "express": "^4.21.2",
     "nodemailer": "^6.10.0",
     "nunjucks": "^3.2.4",
