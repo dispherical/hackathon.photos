@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <script>
+            if (location.protocol !== 'https:' && location.hostname != "localhost") {
+                location.replace('https://' + location.href.split('//')[1]);
+            }
+        </script>
+        <meta charset="utf-8"/>
+        <title>hackathon.photos</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+        <link
+      rel="stylesheet"
+      href="https://unpkg.com/simpledotcss/simple.min.css"
+/>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <a href="/" >Home</a>
+            </nav>
+            <h1>hackathon.photos</h1>
+        </header>
+
+      
+        <main>
+            {% block main %}{% endblock %}
+        </main>
+        <footer>
+      &copy; hackathon.photos 2025 &bull; <a target="_blank" href="https://discord.gg/3YrGHTDeQD">Discord</a> &bull; <a target="_blank" href="irc://irc.blahaj.radio:6667">IRC</a> &bull; Rendered in <b>{{ "" | getExecutionTime(ms) }}ms.</b> A Walgreens Photo partner.
+        </footer>
+    </body>
+</html>

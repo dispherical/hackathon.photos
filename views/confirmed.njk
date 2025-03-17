@@ -1,0 +1,28 @@
+{% extends "parent.njk" %}
+
+{% block main %}
+    <h2>Order confirmed.</h2>
+    <ul>
+        <li>Name: {{ firstName }} {{ lastName}}</li>
+        <li>Expected Time: {{ promiseTime }}</li>
+    </ul>
+    <h3>Photos</h3>
+
+    <table>
+        <tr>
+            <th>Qty</th>
+            <th>Photo</th>
+        </tr>
+        {% for photo in photoArray %}
+            <tr>
+                <td>1</td>
+                <td>
+                    <img src="{{ photo }}">
+                </td>
+
+            </tr>
+        {% else %}
+            <i>No photos! Why not add some?</i>
+        {% endfor %}
+    </table>
+{% endblock %}

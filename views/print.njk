@@ -1,0 +1,224 @@
+{% extends "parent.njk" %}
+<script src="https://cdn.jsdelivr.net/npm/@tarekraafat/autocomplete.js@10.2.9/dist/autoComplete.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tarekraafat/autocomplete.js@10.2.9/dist/css/autoComplete.min.css">
+{% block main %}
+    <h2>Printing from {{ title }}</h2>
+    <details>
+        <summary>Select Photos</summary>
+
+        <button onclick="toggleSelectAll();">Select/Deselect All</button>
+
+        <table>
+            <tr>
+                <th>Select</th>
+                <th>Photo</th>
+                <th>Actions</th>
+            </tr>
+
+            <summary>Select Photos</summary>
+            {% for photo in photos %}
+                <tr>
+                    <td>
+                        <input type="checkbox" class="photo-checkbox" id="scales" name="scales"/></td>
+                    <td>
+                        <img src="/{{ id }}/{{ photo }}">
+                    </td>
+                    <td>
+                        <button onclick="downloadPhoto('{{ id }}', '{{ photo }}')">Download</button>
+                    </td>
+                </tr>
+            {% else %}
+                <i>No photos! Why not add some?</i>
+            {% endfor %}
+
+        </table>
+    </details>
+    <h2>Order</h2>
+    <p id="order-cost">Your order will be about $0.00</p>
+
+    <label>Name</label>
+    <input type="text" name="name" placeholder="John"/>
+    <label>Surname</label>
+    <input type="text" name="surname" placeholder="Doe"/>
+    <label>E-mail</label>
+    <input type="text" name="email" placeholder="johndoe@example.com"/>
+    <label>Phone Number (US/Canada only)</label>
+    <input type="text" name="tel" pattern="[0-9]{3}-[0-9]{3}-[0-9]{4}"/>
+    <label for="store-input">Enter your location to find a store:</label>
+    <input type="text" id="store-input" placeholder="Enter city or zip code"/>
+    <button id="search-button">Search</button>
+    <select id="store-select">
+        <option value="">Select a store</option>
+    </select>
+    <div id="store-details"></div>
+    <p><input type="checkbox" name="agree1"> I acknowledge that I have read, understand and agree to be bound by the Walgreens <a href="https://www.walgreens.com/topic/help/generalhelp/termsofuse.jsp">Terms of Use</a> and <a href="https://www.walgreens.com/topic/help/generalhelp/privacyandsecurity.jsp">Online Privacy &amp; Security Policy</a>.</p>
+    <p><input type="checkbox" name="agree2">I'm aware the total I will pay is an estimate, comes before taxes, and will be paid at Walgreens.</p>
+    <button id="order" disabled="true" onclick="submit()">Order</button>
+    <script>
+        async function lookupStores(query) {
+            const response = await fetch(`/api/lookup?q=${query}`);
+            const data = await response.json();
+            const storeSelect = document.querySelector('#store-select');
+            storeSelect.innerHTML = '';
+
+            data
+                .photoStores
+                .forEach(store => {
+                    const option = document.createElement('option');
+                    option.value = store.photoStoreDetails.storeNum;
+                    option.text = `${store.photoStoreDetails.storeName} - ${store.photoStoreDetails.street}, ${store.photoStoreDetails.city}, ${store.photoStoreDetails.state}`;
+                    option.dataset.details = JSON.stringify(store.photoStoreDetails);
+                    storeSelect.appendChild(option);
+                });
+        }
+
+        function displayStoreDetails(details) {
+            const storeDetails = document.querySelector('#store-details');
+            storeDetails.innerHTML = `
+            <p><strong>Store Name:</strong> ${details.storeName}</p>
+            <p><strong>Address:</strong> ${details.street}, ${details.city}, ${details.state}, ${details.zip}</p>
+            <p><strong>Phone:</strong> ${details.phone}</p>
+            <p><strong>Open Time:</strong> ${details.openTime}</p>
+            <p><strong>Close Time:</strong> ${details.closeTime}</p>
+            <p><strong>Promise Time:</strong> ${details.promiseTime}</p>
+            <p><strong>Distance:</strong> ${details.distance} ${details.distanceUnit}</p>
+        `;
+        }
+        function downloadPhoto(id, photo) {
+            const link = document.createElement('a');
+            link.href = `/${id}/${photo}`;
+            link.download = photo;
+            document
+                .body
+                .appendChild(link);
+            link.click();
+            document
+                .body
+                .removeChild(link);
+        }
+
+        function toggleSelectAll() {
+            const checkboxes = document.querySelectorAll('.photo-checkbox');
+            const allChecked = Array
+                .from(checkboxes)
+                .every(checkbox => checkbox.checked);
+            checkboxes.forEach(checkbox => checkbox.checked = !allChecked);
+        }
+
+        function getSelectedPhotos() {
+            const selectedPhotos = [];
+            const checkboxes = document.querySelectorAll('.photo-checkbox');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    const photoRow = checkbox.closest('tr');
+                    const img = photoRow.querySelector('img');
+                    selectedPhotos.push(img.src);
+                }
+            });
+            return selectedPhotos;
+        }
+        function updateOrderCost() {
+            const selectedPhotos = getSelectedPhotos();
+            const costPerPhoto = 0.33;
+            const totalCost = selectedPhotos.length * costPerPhoto;
+            document
+                .getElementById('order-cost')
+                .innerText = `Your order will be about $${totalCost.toFixed(2)}`;
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            var checkboxes = document.querySelectorAll('.photo-checkbox');
+            const orderButton = document.querySelector("#order");
+
+            function updateOrderButtonState() {
+                const anyChecked = Array
+                    .from(checkboxes)
+                    .some(checkbox => checkbox.checked);
+                orderButton.disabled = !anyChecked;
+            }
+
+            updateOrderButtonState();
+
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    updateOrderCost();
+                    updateOrderButtonState();
+                });
+            });
+        });
+
+        async function submit() {
+            document
+                .querySelector("#order")
+                .disabled = true;
+            document
+                .querySelector("#order")
+                .innerText = "Ordering...";
+            const email = document
+                .querySelector('input[name="email"]')
+                .value;
+            const name = document
+                .querySelector('input[name="name"]')
+                .value;
+            const surname = document
+                .querySelector('input[name="surname"]')
+                .value;
+            const tel = document
+                .querySelector('input[name="tel"]')
+                .value;
+            const storeSelect = document.querySelector('#store-select');
+            const storeNum = storeSelect.value;
+            const selectedOption = storeSelect.options[storeSelect.selectedIndex];
+            const promiseTime = selectedOption
+                ? JSON
+                    .parse(selectedOption.dataset.details)
+                    .promiseTime
+                : '';
+            const agreements = (document.querySelector('input[name="agree1"]').checked && document.querySelector('input[name="agree2"]').checked);
+            if (!agreements) 
+                return alert("You must agree to all of the terms.");
+            const params = new URLSearchParams({
+                photos: JSON.stringify(getSelectedPhotos()),
+                email: email,
+                name: name,
+                surname: surname,
+                tel: tel,
+                storeNum: storeNum,
+                promiseTime: promiseTime
+            });
+
+            fetch("/api/submit?" + params.toString())
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) 
+                        return alert(data.error);
+                    alert(data.message || "Check your E-mail to finish your order.");
+                    document
+                        .querySelector("#order")
+                        .disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document
+                        .querySelector("#order")
+                        .disabled = false;
+                });
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            const storeInput = document.querySelector('#store-input');
+            const searchButton = document.querySelector('#search-button');
+            const storeSelect = document.querySelector('#store-select');
+
+            searchButton.addEventListener('click', () => {
+                lookupStores(storeInput.value);
+            });
+
+            storeSelect.addEventListener('change', () => {
+                const selectedOption = storeSelect.options[storeSelect.selectedIndex];
+                if (selectedOption && selectedOption.dataset.details) {
+                    const details = JSON.parse(selectedOption.dataset.details);
+                    displayStoreDetails(details);
+                }
+            });
+        });
+    </script>
+{% endblock %}

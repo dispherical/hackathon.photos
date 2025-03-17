@@ -1,0 +1,30 @@
+{% extends "parent.njk" %}
+{% block main %}
+    <style>
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+        }
+        .gallery img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        @media (max-width: 600px) {
+            .gallery {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <h2>Gallery for {{ title }}</h2>
+    <div class="gallery">
+        {% for photo in photos %}
+            <a href="/{{ id }}/{{ photo }}" target="_blank">
+                <img src="/{{ id }}/{{ photo }}" alt=""/>
+            </a>
+        {% else %}
+            <p>No photos! Why not add some?</p>
+        {% endfor %}
+    </div>
+{% endblock %}
