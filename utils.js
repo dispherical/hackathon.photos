@@ -1,7 +1,7 @@
 
 module.exports = {
     findStore: async function (lat, lon) {
-        const response = await fetch('https://services-qa.walgreens.com/api/photo/store/v3', {
+        const response = await fetch(`https://services${process.env.WALGREENS_SANDBOX_CODE||""}.walgreens.com/api/photo/store/v3`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -29,7 +29,7 @@ module.exports = {
         return data;
     },
     orderStatus: async function (id) {
-        const response = await fetch('https://services-qa.walgreens.com/api/photo/order/status/v3', {
+        const response = await fetch(`https://services${process.env.WALGREENS_SANDBOX_CODE||""}.walgreens.com/api/photo/order/status/v3`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -50,7 +50,7 @@ module.exports = {
         return data;
     },
     printPhotos: async function (order) {       
-        const response = await fetch('https://services-qa.walgreens.com/api/photo/order/submit/v3', {
+        const response = await fetch(`https://services${process.env.WALGREENS_SANDBOX_CODE||""}.walgreens.com/api/photo/order/submit/v3`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

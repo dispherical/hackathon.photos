@@ -181,6 +181,7 @@ N.B. You will pay at the store.`,
                 grid-template-columns: 1fr;
             }
         }
+        </style>
         <h1>Confirm your photo order</h1>
         <p>Hi ${name} ${surname},</p><p>Before we send your order to Walgreens, we need you to confirm your E-mail address.</p>
         <h2>Photos</h2>
