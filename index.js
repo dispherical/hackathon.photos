@@ -33,7 +33,7 @@ app.use(express.static('styles'));
 
 (async () => {
 
-   
+
     setInterval(function () { require("./exif") }, 10 * 1000)
     setInterval(function () { require("./rclone") }, 60 * 1000 * 5)
 
@@ -65,7 +65,10 @@ app.use(express.static('styles'));
             prefix: `${id}/`
         });
 
-        const photos = result.data.files.map(file => `https://f004.backblazeb2.com/file/hackathon-photos/${file.fileName}`);
+        const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+        const photos = result.data.files
+            .filter(file => allowedExtensions.some(ext => file.fileName.toLowerCase().endsWith(ext)))
+            .map(file => `https://f004.backblazeb2.com/file/hackathon-photos/${file.fileName}`);
         res.render("gallery.njk", { ms, id, photos, title: event.title });
     });
 
@@ -82,10 +85,13 @@ app.use(express.static('styles'));
         const result = await b2.listFileNames({
             bucketId: process.env.BACKBLAZE_BUCKET_ID,
             prefix: `${id}/`,
-            
+
         });
 
-        const photos = result.data.files.map(file => `https://f004.backblazeb2.com/file/hackathon-photos//${file.fileName}`);
+        const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+        const photos = result.data.files
+            .filter(file => allowedExtensions.some(ext => file.fileName.toLowerCase().endsWith(ext)))
+            .map(file => `https://f004.backblazeb2.com/file/hackathon-photos/${file.fileName}`);
         res.render("print.njk", { ms, id, photos, title: event.title });
     });
     async function authorizer(username, password, cb) {
