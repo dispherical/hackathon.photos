@@ -35,6 +35,8 @@ app.use(express.static('styles'));
 
    
     setInterval(function () { require("./exif") }, 10 * 1000)
+    setInterval(function () { require("./rclone") }, 60 * 1000 * 5)
+
     const env = nunjucks.configure('views', {
         autoescape: true,
         express: app,
