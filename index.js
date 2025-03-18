@@ -4,11 +4,19 @@ const app = express();
 const nunjucks = require("nunjucks");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const webdav = require('webdav-server').v2;
 const fs = require("node:fs");
 const validator = require('validator');
 const utils = require("./utils")
 const nodemailer = require("nodemailer");
+const B2 = require('backblaze-b2');
+const multer = require("multer");
+const os = require("node:os")
+const upload = multer({ dest: os.tmpdir() });
+const basicAuth = require('express-basic-auth')
+const b2 = new B2({
+    applicationKeyId: process.env.BACKBLAZE_APPKEY_ID,
+    applicationKey: process.env.BACKBLAZE_APPKEY,
+});
 
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -25,25 +33,8 @@ app.use(express.static('styles'));
 
 (async () => {
 
-    const events = await prisma.events.findMany({})
-    const userManager = new webdav.SimpleUserManager();
-    const privilegeManager = new webdav.SimplePathPrivilegeManager();
-
-    events.forEach(event => {
-        const user = userManager.addUser(event.id, event.apiKey, false);
-        privilegeManager.setRights(user, `/${event.id}`, ['all']);
-    })
-    const server = new webdav.WebDAVServer({
-        requireAuthentication: true,
-        httpAuthentication: new webdav.HTTPBasicAuthentication(userManager, process.env.DOMAIN),
-        privilegeManager: privilegeManager,
-        rootFileSystem: new webdav.PhysicalFileSystem('./photos'),
-    });
-    server.afterRequest((arg, next) => {
-        next();
-    });
+   
     setInterval(function () { require("./exif") }, 10 * 1000)
-    app.use(webdav.extensions.express("/webdav", server));
     const env = nunjucks.configure('views', {
         autoescape: true,
         express: app,
@@ -65,11 +56,17 @@ app.use(express.static('styles'));
             where: { id }
         })
         if (!event) return res.status(404).send("Event not found")
-        const photos = fs.readdirSync(`./photos/${id}`)
 
+        await b2.authorize();
+        const result = await b2.listFileNames({
+            bucketId: process.env.BACKBLAZE_BUCKET_ID,
+            prefix: `${id}/`
+        });
 
+        const photos = result.data.files.map(file => `https://f004.backblazeb2.com/file/hackathon-photos/${file.fileName}`);
         res.render("gallery.njk", { ms, id, photos, title: event.title });
     });
+
     app.get("/order/:id", async function (req, res) {
         const ms = +new Date()
         const id = req.params.id
@@ -78,12 +75,83 @@ app.use(express.static('styles'));
             where: { id }
         })
         if (!event) return res.status(404).send("Event not found")
-        const photos = fs.readdirSync(`./photos/${id}`)
 
+        await b2.authorize();
+        const result = await b2.listFileNames({
+            bucketId: process.env.BACKBLAZE_BUCKET_ID,
+            prefix: `${id}/`,
+            
+        });
 
+        const photos = result.data.files.map(file => `https://f004.backblazeb2.com/file/hackathon-photos//${file.fileName}`);
         res.render("print.njk", { ms, id, photos, title: event.title });
     });
+    async function authorizer(username, password, cb) {
+        const event = await prisma.events.findFirst({
+            where: { id: username }
+        })
+        if (!event) return cb(null, false);
+        if (event.apiKey != password) return cb(null, false);
 
+        return cb(null, true);
+
+    }
+
+    app.get("/files/:id", basicAuth({
+        authorizer: authorizer,
+        authorizeAsync: true,
+        challenge: true,
+    }), async function (req, res) {
+        const ms = +new Date()
+
+        const { id } = req.params;
+
+        const event = await prisma.events.findFirst({
+            where: { id }
+        })
+        if (!event) return res.status(404).send("Event not found")
+        await b2.authorize();
+        const result = await b2.listFileNames({
+            bucketId: process.env.BACKBLAZE_BUCKET_ID,
+            prefix: `${id}/`
+        });
+        const files = result.data.files
+        res.render("manager.njk", { ms, ...event, files });
+    });
+
+    app.post("/files/:id/upload", upload.single("file"), basicAuth({
+        authorizer: authorizer,
+        authorizeAsync: true,
+        challenge: true,
+    }), async function (req, res) {
+        await b2.authorize();
+        if (!req.file) return res.status(400).send("No file provided.");
+        const { id } = req.params;
+        const fileName = `${id}/${req.file.originalname}`;
+        const data = fs.readFileSync(req.file.path);
+        const uploadUrlResponse = await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID });
+        await b2.uploadFile({
+            bucketId: process.env.BACKBLAZE_BUCKET_ID,
+            fileName,
+            data,
+            uploadUrl: uploadUrlResponse.data.uploadUrl,
+            uploadAuthToken: uploadUrlResponse.data.authorizationToken,
+        });
+        fs.unlinkSync(req.file.path);
+        res.redirect(`/files/${id}`);
+    });
+
+    app.get("/files/:id/delete", basicAuth({
+        authorizer: authorizer,
+        authorizeAsync: true,
+        challenge: true,
+    }), async function (req, res) {
+        await b2.authorize();
+        const { id } = req.params;
+        const { fileName, fileId } = req.query;
+        await b2.deleteFileVersion({ fileName, fileId });
+        res.redirect(`/files/${id}`);
+    });
     app.get("/api/lookup", async function (req, res) {
         const ms = +new Date()
         const { q } = req.query
@@ -184,6 +252,7 @@ N.B. You will pay at the store.`,
         </style>
         <h1>Confirm your photo order</h1>
         <p>Hi ${name} ${surname},</p><p>Before we send your order to Walgreens, we need you to confirm your E-mail address.</p>
+        <p>You may do so here: <a href="https://hackathon.photos/confirm/${id}">https://hackathon.photos/confirm/${id}</a></p>
         <h2>Photos</h2>
         <div class="gallery">
         ${photos.map(photo => `<a href="${photo}" target="_blank"><img src="${photo}" alt="${photo}"/></a>`)}

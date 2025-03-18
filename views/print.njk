@@ -6,6 +6,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
      crossorigin=""></script>
+     <small><a href="/gallery/{{ id }}">&larr; Go Back</a></small>
     <h2>Printing from {{ title }}</h2>
     <details>
         <summary>Select Photos</summary>
@@ -24,10 +25,10 @@
                     <td>
                         <input type="checkbox" class="photo-checkbox" id="scales" name="scales"/></td>
                     <td>
-                        <img src="/{{ id }}/{{ photo }}">
+                        <img src="{{ photo }}">
                     </td>
                     <td>
-                        <button onclick="downloadPhoto('{{ id }}', '{{ photo }}')">Download</button>
+                        <button onclick="downloadPhoto('{{ photo }}')">Download</button>
                     </td>
                 </tr>
             {% else %}
@@ -135,9 +136,9 @@
                 .value = details.tax || 0;
         }
 
-        function downloadPhoto(id, photo) {
+        function downloadPhoto(photo) {
             const link = document.createElement('a');
-            link.href = `/${id}/${photo}`;
+            link.href = photo;
             link.download = photo;
             document
                 .body

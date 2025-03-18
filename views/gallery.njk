@@ -28,21 +28,21 @@
         }
     </style>
     <h2>Gallery for {{ title }}</h2>
-    <p>Want to print them out? <a href="/order/{{ id }}">Click here to order from Walgreens</a>.</p>
+    <p>Want to print them out? <a href="/order/{{ id }}">Click here to order from Walgreens</a>. You can also <a href="/files/{{ id }}">upload and manage files here if you have an access token</a>.</p>
     <h2>Map</h2>
     <div id="map"></div>
     <h2>Gallery</h2>
     <div class="gallery">
         {% for photo in photos %}
-            <a href="/{{ id }}/{{ photo }}" target="_blank">
-                <img src="/{{ id }}/{{ photo }}" alt=""/>
+            <a href="{{ photo }}" target="_blank">
+                <img src="{{ photo }}" alt=""/>
             </a>
         {% else %}
             <p>No photos! Why not add some?</p>
         {% endfor %}
     </div>
     <script>
-        fetch("/{{ id }}/exif.json")
+        fetch("https://f004.backblazeb2.com/file/hackathon-photos/{{ id }}/exif.json")
             .then(response => response.json())
             .then(data => {
                 data.sort((a, b) => a.date - b.date);

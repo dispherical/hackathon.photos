@@ -1,0 +1,35 @@
+{% extends "parent.njk" %}
+{% block main %}
+    <small>
+        <a href="/gallery/{{ id }}">&larr; Go Back</a>
+    </small>
+    <h1>Files for {{ title }}</h1>
+    <form action="/files/{{ id }}/upload" method="POST" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <button type="submit">Upload</button>
+    </form>
+    <table>
+        <thead>
+            <tr>
+                <th>Preview</th>
+                <th>Filename</th>
+                <th>Delete</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for file in files %}
+                <tr>
+                    <td><img src="https://f004.backblazeb2.com/file/hackathon-photos/{{ file.fileName }}" alt="preview" width="100"></td>
+                    <td>
+                        <a href="https://f004.backblazeb2.com/file/hackathon-photos/{{ file.fileName }}" target="_blank">{{file.fileName | replace(id, "")  | replace("/", "")}}</a>
+                    </td>
+                    <td>
+                        <a href="/files/{{id}}/delete?fileName={{file.fileName|urlencode}}&fileId={{file.fileId|urlencode}}">Delete</a>
+                    </td>
+                </tr>
+            {% else %}
+                <p>No photos! Why not add some?</p>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
