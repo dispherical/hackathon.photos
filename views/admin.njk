@@ -1,0 +1,36 @@
+{% extends "parent.njk" %}
+{% block main %}
+    <main>
+                <h1>Admin Dashboard</h1>
+
+        <section>
+            <h2>Create Event</h2>
+            <form action="/admin/create" method="post">
+                <label for="apiKey">ID</label>
+                <input type="text" id="id" name="id" required>
+                <label for="title">Title</label>
+                <input type="text" id="title" name="title" required>
+
+                <label for="apiKey">API Key</label>
+                <input type="text" id="apiKey" name="apiKey" required>
+
+                <button type="submit">Create</button>
+            </form>
+        </section>
+
+        <section>
+            <h2>All Events</h2>
+            <ul>
+                {% for event in events %}
+                    <li>
+                        <strong>{{ event.title }}</strong> (ID: {{ event.id }})
+                    <form action="/admin/{{ event.id }}/delete" method="post" style="display:inline;">
+                            <button type="submit">Delete</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+    </main>
+
+{% endblock %}

@@ -18,6 +18,8 @@ const b2 = new B2({
     applicationKey: process.env.BACKBLAZE_APPKEY,
 });
 
+app.use(express.urlencoded({ extended: true }));
+
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: 587,
@@ -104,7 +106,43 @@ app.use(express.static('styles'));
         return cb(null, true);
 
     }
-
+    app.post("/admin/create", basicAuth({
+        users: {
+            'admin': process.env.ADMIN_PASSWORD,
+        },
+        challenge: true,
+    }), async (req, res) => {
+        const { title, apiKey, id } = req.body;
+        console.log(req.body)
+        if (!title || !apiKey || !id) return res.status(400).send("Title and API key are required.");
+        await prisma.events.create({
+            data: {
+                id,
+                title,
+                apiKey
+            }
+        });
+        res.redirect("/admin");
+    });
+    app.get("/admin", basicAuth({
+        users: {
+            'admin': process.env.ADMIN_PASSWORD,
+        },
+        challenge: true,
+    }), async (req, res) => {
+        const events = await prisma.events.findMany();
+        res.render("admin.njk", { events });
+    });
+    app.post("/admin/:id/delete", basicAuth({
+        users: {
+            'admin': process.env.ADMIN_PASSWORD,
+        },
+        challenge: true,
+    }), async (req, res) => {
+        const { id } = req.params;
+        await prisma.events.delete({ where: { id } });
+        res.redirect("/admin");
+    });
     app.get("/files/:id", basicAuth({
         authorizer: authorizer,
         authorizeAsync: true,
