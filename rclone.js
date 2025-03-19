@@ -52,7 +52,8 @@ key = ${process.env.BACKBLAZE_APPKEY}`
 
                 if (!config.includes("[guest]")) return;
                 fs.writeFileSync(tmpFile, config)
-                execSync(`rclone sync --dry-run guest: host:hackathon-photos/${folder} --config ${tmpFile}`)
+                if (folder == "nova") return execSync(`rclone sync "guest:shared-album/Scrapyard NoVa" host:hackathon-photos/${folder} --config ${tmpFile}`)
+                execSync(`rclone sync guest: host:hackathon-photos/${folder} --config ${tmpFile}`)
             }
         }
     }
