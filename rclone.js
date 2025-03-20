@@ -32,8 +32,6 @@ const b2 = new B2({
     });
 
     for (const folder of Object.keys(folders)) {
-        console.log(folder)
-
         for (const fileObj of folders[folder]) {
             const fileName = fileObj.fileName
             if (fileName.includes(".rclone")) {

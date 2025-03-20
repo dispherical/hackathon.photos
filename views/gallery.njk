@@ -32,6 +32,12 @@
     <h2>Map</h2>
     <div id="map"></div>
     <h2>Gallery</h2>
+<div>
+    <input type="text" id="searchQuery" placeholder="🔮 Search using AI" />
+    <button id="searchButton">Search</button>
+</div>
+<div id="searchResults" class="gallery"></div>
+<hr>
     <div class="gallery">
         {% for photo in photos %}
             <a href="{{ photo }}" target="_blank">
@@ -42,6 +48,42 @@
         {% endfor %}
     </div>
     <script>
+            document.getElementById('searchButton').addEventListener('click', () => {
+        const query = document.getElementById('searchQuery').value.trim();
+        if (!query) {
+            alert('Please enter a search query.');
+            return;
+        }
+
+        fetch(`/api/{{ id }}/search?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(results => {
+                const searchResultsContainer = document.getElementById('searchResults');
+                searchResultsContainer.innerHTML = '';
+
+                if (results.length === 0) {
+                    searchResultsContainer.innerHTML = '<p>No results found.</p>';
+                    return;
+                }
+
+                results.forEach(result => {
+                    const link = document.createElement('a');
+                    link.href = `https://f004.backblazeb2.com/file/hackathon-photos/${result.image}`;
+                    link.target = '_blank';
+
+                    const img = document.createElement('img');
+                    img.src = `https://f004.backblazeb2.com/file/hackathon-photos/${result.image}`;
+                    img.alt = result.pageContent;
+
+                    link.appendChild(img);
+                    searchResultsContainer.appendChild(link);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching search results:', error);
+                alert('An error occurred while searching. Please try again later.');
+            });
+    });
         fetch("https://f004.backblazeb2.com/file/hackathon-photos/{{ id }}/exif.json")
             .then(response => response.json())
             .then(data => {

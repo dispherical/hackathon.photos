@@ -29,3 +29,9 @@ model Order {
     confirmed     Boolean  @default(false)
     vendorOrderId String?
 }
+
+model Photo {
+    id          String   @id @unique
+    createdAt   DateTime @default(now())
+    description String
+}

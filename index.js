@@ -13,9 +13,24 @@ const multer = require("multer");
 const os = require("node:os")
 const upload = multer({ dest: os.tmpdir() });
 const basicAuth = require('express-basic-auth')
+const { z } = require("zod");
+const { OpenAIEmbeddings } = require('@langchain/openai');
+const { MemoryVectorStore } = require("langchain/vectorstores/memory")
+const { Document } = require("@langchain/core/documents")
+const { StructuredOutputParser } = require("langchain/output_parsers");
+const { ChatOpenAI } = require("@langchain/openai");
+const { ChatPromptTemplate } = require('@langchain/core/prompts');
+const { createRetrievalChain } = require("langchain/chains/retrieval");
+const { createStuffDocumentsChain } = require("langchain/chains/combine_documents");
 const b2 = new B2({
     applicationKeyId: process.env.BACKBLAZE_APPKEY_ID,
     applicationKey: process.env.BACKBLAZE_APPKEY,
+});
+let embeddings = new OpenAIEmbeddings({
+    model: "text-embedding-3-small",
+    temperature: 0,
+    maxRetries: 0,
+    apiKey: process.env.OPENAI_API_KEY,
 });
 
 app.use(express.urlencoded({ extended: true }));
@@ -36,7 +51,7 @@ app.use(express.static('styles'));
 (async () => {
 
 
-    setInterval(function () { require("./exif") }, 10 * 1000)
+    setInterval(function () { require("./exif") }, 60 * 1000 * 5)
     setInterval(function () { require("./rclone") }, 60 * 1000 * 5)
 
     const env = nunjucks.configure('views', {
@@ -113,7 +128,6 @@ app.use(express.static('styles'));
         challenge: true,
     }), async (req, res) => {
         const { title, apiKey, id } = req.body;
-        console.log(req.body)
         if (!title || !apiKey || !id) return res.status(400).send("Title and API key are required.");
         await prisma.events.create({
             data: {
@@ -187,6 +201,66 @@ app.use(express.static('styles'));
         res.redirect(`/files/${id}`);
     });
 
+
+    app.get("/api/:id/search", async function (req, res) {
+        const { id } = req.params;
+        const { q } = req.query;
+
+        if (!q) return res.json([]);
+        
+        const ResponseFormatter = z.array(
+            z.object({
+              image: z.string().describe("Path to the relevant image, extracted from the document"),
+            })
+          );
+        try {
+            // Fetch the EXIF data for the event
+            const response = await fetch(`https://f004.backblazeb2.com/file/hackathon-photos/${id}/exif.json`);
+            if (response.status >= 400) return res.json([]);
+            const json = await response.json();
+
+            // Prepare documents for the vector store
+            const docs = json.map(document => new Document({
+                pageContent: `${document.description}\n\nPath to image: ${document.image}`,
+                metadata: { id: document.md5Hash, image: document.image },
+            }));
+
+            // Initialize the vector store and add documents
+            const vectorStore = new MemoryVectorStore(embeddings);
+            await vectorStore.addDocuments(docs);
+
+            // Initialize the LLM and RAG chain
+            const llm = new ChatOpenAI({
+                modelName: "gpt-4o",
+                temperature: 0,
+                apiKey: process.env.OPENAI_API_KEY,
+
+                configuration:{
+                    baseURL: "https://ai.hackclub.com"
+                }
+            });
+
+            const retriever = vectorStore.asRetriever();
+            const prompt = ChatPromptTemplate.fromMessages([
+                ["system", "You are given a description of a bunch of images. You should see which images fit the user's query. {context}"],
+                ["system", "YOU MUST ALWAYS FORMAT your response like this and NEVER include any other text after that.: [{{ \"image\": \"Path to image\"}}] {context}"],
+                ["human", "{input}"],
+            ]);
+            const questionAnswerChain = await createStuffDocumentsChain({
+                llm,
+                prompt,
+            });
+            const ragChain = await createRetrievalChain({
+                retriever,
+                combineDocsChain: questionAnswerChain,
+            });
+            const result = await ragChain.invoke({ input: q});
+            res.json(JSON.parse(result.answer));
+        } catch (error) {
+            console.error("Error in /api/:id/search:", error);
+            res.status(500).json({ error: "An error occurred while processing your request." });
+        }
+    });
     app.get("/files/:id/delete", basicAuth({
         authorizer: authorizer,
         authorizeAsync: true,

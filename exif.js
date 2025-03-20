@@ -2,10 +2,12 @@ require('dotenv').config()
 const B2 = require('backblaze-b2');
 const exifParser = require('exif-parser');
 const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg", ".bmp", ".ico", ".tiff", ".tif"];
-
+const md5 = require('md5');
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
 const b2 = new B2({
-    applicationKeyId: process.env.BACKBLAZE_APPKEY_ID,
-    applicationKey: process.env.BACKBLAZE_APPKEY,
+  applicationKeyId: process.env.BACKBLAZE_APPKEY_ID,
+  applicationKey: process.env.BACKBLAZE_APPKEY,
 });
 
 (async () => {
@@ -32,43 +34,77 @@ const b2 = new B2({
     folders[folder].push(file);
   });
 
-  for (const folder of Object.keys(folders)) {
-    const exifData = [];
-    for (const fileObj of folders[folder]) {
-      const ext = fileObj.fileName.split('.').pop().toLowerCase();
-      if (!imageExtensions.includes(`.${ext}`)) continue;
+function chunkArray(array, size) {
+  const chunked = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunked.push(array.slice(i, i + size));
+  }
+  return chunked;
+}
 
-     
+
+for (const folder of Object.keys(folders)) {
+  const exifData = [];
+  const chunkedFiles = chunkArray(folders[folder], 5);
+
+  for (const chunk of chunkedFiles) {
+    const chunkResults = await Promise.all(chunk.map(async (fileObj) => {
+      const ext = fileObj.fileName.split('.').pop().toLowerCase();
+      if (!imageExtensions.includes(`.${ext}`)) return null;
+
       const downloadRes = await b2.downloadFileByName({
-        bucketName: "hackathon-photos"      ,  
+        bucketName: "hackathon-photos",
         fileName: fileObj.fileName,
         responseType: "arraybuffer"
       });
       const fileBuffer = Buffer.from(await downloadRes.data);
+      let description;
+      const md5Hash = md5(fileBuffer);
+      const existingDescription = await prisma.photo.findFirst({
+        where: { id: md5Hash }
+      });
+
+      if (!existingDescription) {
+        const newDescription = await require("./describe")(fileBuffer);
+        await prisma.photo.create({
+          data: {
+            id: md5Hash,
+            description: newDescription.content
+          }
+        });
+        description = newDescription.content;
+      } else {
+        description = existingDescription.description;
+      }
 
       const result = exifParser.create(fileBuffer).parse();
       const lat = result.tags.GPSLatitude || '';
       const lon = result.tags.GPSLongitude || '';
       const date = result.tags.DateTimeOriginal * 1000.0 || Date.now();
-      if (!lat || !lon || !date) continue;
 
-      exifData.push({
+      return {
         image: fileObj.fileName,
         lat,
         lon,
-        date
-      });
-    }
+        date,
+        description,
+        md5Hash,
+        event: folder
+      };
+    }));
 
-    const exifJsonString = JSON.stringify(exifData);
-    const uploadUrlResponse = await b2.getUploadUrl({ bucketId });
-    await b2.uploadFile({
-        fileName: folder + '/exif.json',
-        data: Buffer.from(exifJsonString),
-        bucketId,
-        contentType: 'application/json',
-        uploadUrl: uploadUrlResponse.data.uploadUrl,
-        uploadAuthToken: uploadUrlResponse.data.authorizationToken,
-      });
+    exifData.push(...chunkResults.filter(item => item !== null));
   }
+
+  const exifJsonString = JSON.stringify(exifData);
+  const uploadUrlResponse = await b2.getUploadUrl({ bucketId });
+  await b2.uploadFile({
+    fileName: folder + '/exif.json',
+    data: Buffer.from(exifJsonString),
+    bucketId,
+    contentType: 'application/json',
+    uploadUrl: uploadUrlResponse.data.uploadUrl,
+    uploadAuthToken: uploadUrlResponse.data.authorizationToken,
+  });
+}
 })();
