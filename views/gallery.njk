@@ -68,11 +68,11 @@
 
                 results.forEach(result => {
                     const link = document.createElement('a');
-                    link.href = `https://f004.backblazeb2.com/file/hackathon-photos/${result.image}`;
+                    link.href = `https://cdn.hackathon.photos/${result.image}`;
                     link.target = '_blank';
 
                     const img = document.createElement('img');
-                    img.src = `https://f004.backblazeb2.com/file/hackathon-photos/${result.image}`;
+                    img.src = `https://cdn.hackathon.photos/${result.image}`;
                     img.alt = result.pageContent;
 
                     link.appendChild(img);
@@ -84,7 +84,7 @@
                 alert('An error occurred while searching. Please try again later.');
             });
     });
-        fetch("https://f004.backblazeb2.com/file/hackathon-photos/{{ id }}/exif.json")
+        fetch("https://cdn.hackathon.photos/{{ id }}/exif.json")
             .then(response => response.json())
             .then(data => {
                 data.sort((a, b) => a.date - b.date);
@@ -108,7 +108,7 @@
                     const marker = L
                         .marker([photo.lat, photo.lon])
                         .addTo(map);
-                    marker.bindPopup(`<a href="https://f004.backblazeb2.com/file/hackathon-photos/${photo.image}" target="_blank"><img src="https://f004.backblazeb2.com/file/hackathon-photos/${photo.image}" alt="" style="width: auto; height: auto;"></a>`);
+                    marker.bindPopup(`<a href="https://cdn.hackathon.photos/${photo.image}" target="_blank"><img src="https://cdn.hackathon.photos/${photo.image}" alt="" style="width: auto; height: auto;"></a>`);
                     latlngs.push([photo.lat, photo.lon]);
                 });
 

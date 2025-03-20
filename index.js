@@ -85,7 +85,7 @@ app.use(express.static('styles'));
         const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
         const photos = result.data.files
             .filter(file => allowedExtensions.some(ext => file.fileName.toLowerCase().endsWith(ext)))
-            .map(file => `https://f004.backblazeb2.com/file/hackathon-photos/${file.fileName}`);
+            .map(file => `https://cdn.hackathon.photos/${file.fileName}`);
         res.render("gallery.njk", { ms, id, photos, title: event.title });
     });
 
@@ -108,7 +108,7 @@ app.use(express.static('styles'));
         const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
         const photos = result.data.files
             .filter(file => allowedExtensions.some(ext => file.fileName.toLowerCase().endsWith(ext)))
-            .map(file => `https://f004.backblazeb2.com/file/hackathon-photos/${file.fileName}`);
+            .map(file => `https://cdn.hackathon.photos/${file.fileName}`);
         res.render("print.njk", { ms, id, photos, title: event.title });
     });
     async function authorizer(username, password, cb) {
@@ -215,7 +215,7 @@ app.use(express.static('styles'));
           );
         try {
             // Fetch the EXIF data for the event
-            const response = await fetch(`https://f004.backblazeb2.com/file/hackathon-photos/${id}/exif.json`);
+            const response = await fetch(`https://cdn.hackathon.photos/${id}/exif.json`);
             if (response.status >= 400) return res.json([]);
             const json = await response.json();
 

@@ -45,56 +45,57 @@ function chunkArray(array, size) {
 
 for (const folder of Object.keys(folders)) {
   const exifData = [];
-  const chunkedFiles = chunkArray(folders[folder], 5);
+  const chunkedFiles = chunkArray(folders[folder], 20);
 
   for (const chunk of chunkedFiles) {
-    const chunkResults = await Promise.all(chunk.map(async (fileObj) => {
-      const ext = fileObj.fileName.split('.').pop().toLowerCase();
-      if (!imageExtensions.includes(`.${ext}`)) return null;
-      console.log(`Downloading file: ${fileObj.fileName}`)
-
-      const downloadRes = await b2.downloadFileByName({
-        bucketName: "hackathon-photos",
-        fileName: fileObj.fileName,
-        responseType: "arraybuffer"
-      });
-      const fileBuffer = Buffer.from(await downloadRes.data);
-      let description;
-      const md5Hash = md5(fileBuffer);
-      const existingDescription = await prisma.photo.findFirst({
-        where: { id: md5Hash }
-      });
-
-      if (!existingDescription) {
-        console.log(`Generating description for ${fileObj.fileName}`)
-        const newDescription = await require("./describe")(fileBuffer);
-        await prisma.photo.create({
-          data: {
-            id: md5Hash,
-            description: newDescription.content
-          }
+    const chunkResults = await Promise.all(chunk.map((fileObj) => {
+      return (async () => {
+        const ext = fileObj.fileName.split('.').pop().toLowerCase();
+        if (!imageExtensions.includes(`.${ext}`)) return null;
+        console.log(`Downloading file: ${fileObj.fileName}`);
+    
+        const downloadRes = await b2.downloadFileByName({
+          bucketName: "hackathon-photos",
+          fileName: fileObj.fileName,
+          responseType: "arraybuffer"
         });
-        description = newDescription.content;
-        console.log(`Generated description for ${fileObj.fileName}`)
-
-      } else {
-        description = existingDescription.description;
-      }
-
-      const result = exifParser.create(fileBuffer).parse();
-      const lat = result.tags.GPSLatitude || '';
-      const lon = result.tags.GPSLongitude || '';
-      const date = result.tags.DateTimeOriginal * 1000.0 || Date.now();
-
-      return {
-        image: fileObj.fileName,
-        lat,
-        lon,
-        date,
-        description,
-        md5Hash,
-        event: folder
-      };
+        const fileBuffer = Buffer.from(await downloadRes.data);
+        let description;
+        const md5Hash = md5(fileBuffer);
+        const existingDescription = await prisma.photo.findFirst({
+          where: { id: md5Hash }
+        });
+    
+        if (!existingDescription) {
+          console.log(`Generating description for ${fileObj.fileName}`);
+          const newDescription = await require("./describe")(fileBuffer);
+          await prisma.photo.create({
+            data: {
+              id: md5Hash,
+              description: newDescription.content
+            }
+          });
+          description = newDescription.content;
+          console.log(`Generated description for ${fileObj.fileName}`);
+        } else {
+          description = existingDescription.description;
+        }
+    
+        const result = exifParser.create(fileBuffer).parse();
+        const lat = result.tags.GPSLatitude || '';
+        const lon = result.tags.GPSLongitude || '';
+        const date = result.tags.DateTimeOriginal * 1000.0 || Date.now();
+    
+        return {
+          image: fileObj.fileName,
+          lat,
+          lon,
+          date,
+          description,
+          md5Hash,
+          event: folder
+        };
+      })();
     }));
 
     exifData.push(...chunkResults.filter(item => item !== null));
