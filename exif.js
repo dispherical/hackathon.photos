@@ -51,6 +51,7 @@ for (const folder of Object.keys(folders)) {
     const chunkResults = await Promise.all(chunk.map(async (fileObj) => {
       const ext = fileObj.fileName.split('.').pop().toLowerCase();
       if (!imageExtensions.includes(`.${ext}`)) return null;
+      console.log(`Downloading file: ${fileObj.fileName}`)
 
       const downloadRes = await b2.downloadFileByName({
         bucketName: "hackathon-photos",
@@ -65,6 +66,7 @@ for (const folder of Object.keys(folders)) {
       });
 
       if (!existingDescription) {
+        console.log(`Generating description for ${fileObj.fileName}`)
         const newDescription = await require("./describe")(fileBuffer);
         await prisma.photo.create({
           data: {
@@ -73,6 +75,8 @@ for (const folder of Object.keys(folders)) {
           }
         });
         description = newDescription.content;
+        console.log(`Generated description for ${fileObj.fileName}`)
+
       } else {
         description = existingDescription.description;
       }

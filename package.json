@@ -16,6 +16,7 @@
     "express": "^4.21.2",
     "express-basic-auth": "^1.2.1",
     "file-type": "^16.5.4",
+    "langchain": "^0.3.19",
     "md5": "^2.3.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.10.0",
