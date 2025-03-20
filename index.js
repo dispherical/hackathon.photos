@@ -17,7 +17,6 @@ const { z } = require("zod");
 const { OpenAIEmbeddings } = require('@langchain/openai');
 const { MemoryVectorStore } = require("langchain/vectorstores/memory")
 const { Document } = require("@langchain/core/documents")
-const { StructuredOutputParser } = require("langchain/output_parsers");
 const { ChatOpenAI } = require("@langchain/openai");
 const { ChatPromptTemplate } = require('@langchain/core/prompts');
 const { createRetrievalChain } = require("langchain/chains/retrieval");
@@ -34,7 +33,26 @@ let embeddings = new OpenAIEmbeddings({
 });
 
 app.use(express.urlencoded({ extended: true }));
+const cache = {};
 
+async function cachedListFileNames(bucketId, prefix) {
+    const cacheKey = `${bucketId}:${prefix}`;
+    const cacheTTL = 5 * 60 * 1000;
+
+    if (cache[cacheKey] && (Date.now() - cache[cacheKey].timestamp < cacheTTL)) {
+        return cache[cacheKey].data;
+    }
+
+    await b2.authorize();
+    const result = await b2.listFileNames({ bucketId, prefix });
+
+    cache[cacheKey] = {
+        data: result,
+        timestamp: Date.now(),
+    };
+
+    return result;
+}
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: 587,
@@ -57,7 +75,7 @@ app.use(express.static('styles'));
     const env = nunjucks.configure('views', {
         autoescape: true,
         express: app,
-        noCache: true
+        noCache: false
     });
     env.addFilter('getExecutionTime', function (a, ms) {
         return (+new Date()) - ms
@@ -68,20 +86,16 @@ app.use(express.static('styles'));
         res.render("index.njk", { ms });
     });
     app.get("/gallery/:id", async function (req, res) {
-        const ms = +new Date()
-        const id = req.params.id
-
+        const ms = +new Date();
+        const id = req.params.id;
+    
         const event = await prisma.events.findFirst({
-            where: { id }
-        })
-        if (!event) return res.status(404).send("Event not found")
-
-        await b2.authorize();
-        const result = await b2.listFileNames({
-            bucketId: process.env.BACKBLAZE_BUCKET_ID,
-            prefix: `${id}/`
+            where: { id },
         });
-
+        if (!event) return res.status(404).send("Event not found");
+    
+        const result = await cachedListFileNames(process.env.BACKBLAZE_BUCKET_ID, `${id}/`);
+    
         const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
         const photos = result.data.files
             .filter(file => allowedExtensions.some(ext => file.fileName.toLowerCase().endsWith(ext)))
@@ -99,11 +113,8 @@ app.use(express.static('styles'));
         if (!event) return res.status(404).send("Event not found")
 
         await b2.authorize();
-        const result = await b2.listFileNames({
-            bucketId: process.env.BACKBLAZE_BUCKET_ID,
-            prefix: `${id}/`,
+        const result = await cachedListFileNames(process.env.BACKBLAZE_BUCKET_ID, `${id}/`);
 
-        });
 
         const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
         const photos = result.data.files
