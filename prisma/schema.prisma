@@ -33,5 +33,9 @@ model Order {
 model Photo {
     id          String   @id @unique
     createdAt   DateTime @default(now())
+    fileName    String   @unique
     description String
+    lat         Float?
+    lon         Float?
+    date        BigInt
 }
