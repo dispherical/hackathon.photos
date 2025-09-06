@@ -29,6 +29,7 @@ const b2 = new B2({
     applicationKeyId: process.env.BACKBLAZE_APPKEY_ID,
     applicationKey: process.env.BACKBLAZE_APPKEY,
 });
+
 let embeddings = new OpenAIEmbeddings({
     model: "text-embedding-3-small",
     temperature: 0,
@@ -323,7 +324,31 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
             prefix: `${id}/`
         });
         const files = result.data.files;
-        res.render("manager.njk", { ms: +new Date(), ...event, files, userRole: eventUser.role });
+        
+        let users = [];
+        let auditLogs = [];
+        if (eventUser.role === 'admin' || req.userId === event.ownerId) {
+            users = await prisma.eventUser.findMany({
+                where: { eventId: id },
+                include: { user: true }
+            });
+            auditLogs = await prisma.actionLog.findMany({
+                where: { eventId: id },
+                include: { user: true },
+                orderBy: { createdAt: 'desc' },
+                take: 100
+            });
+        }
+        
+        res.render("manager.njk", { 
+            ms: +new Date(), 
+            ...event, 
+            files, 
+            userRole: eventUser.role,
+            isOwner: req.userId === event.ownerId,
+            users,
+            auditLogs
+        });
     });
 
     app.post("/files/:id/upload", upload.array("files", 50), async function (req, res) {
@@ -338,12 +363,15 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
         try {
             for (const file of req.files) {
                 const fileName = `${id}/${file.originalname}`;
+                const uploadUrlResponse = await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID });
+                
                 await b2.uploadFile({
-                    uploadUrl: (await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID })).data.uploadUrl,
-                    uploadAuthToken: (await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID })).data.authorizationToken,
+                    uploadUrl: uploadUrlResponse.data.uploadUrl,
+                    uploadAuthToken: uploadUrlResponse.data.authorizationToken,
                     fileName,
                     data: fs.readFileSync(file.path)
                 });
+                
                 await prisma.actionLog.create({
                     data: {
                         eventId: id,
@@ -356,7 +384,7 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
             res.redirect(`/files/${id}`);
         } catch (error) {
             req.files.forEach(file => fs.unlinkSync(file.path));
-            console.error("Upload error:", error);
+            //console.error("Upload error:", error);
             res.status(500).send("Upload failed. Please try again.");
         }
     });
@@ -458,6 +486,117 @@ You van verify your E-mail by using the following link: https://hackathon.photos
         });
         res.redirect(`/files/${id}`);
     });
+    
+    app.post("/files/:id/users/:userId/role", async (req, res) => {
+        if (!req.userId) return res.redirect("/login");
+        const { id, userId } = req.params;
+        const { role } = req.body;
+        
+        const event = await prisma.events.findFirst({ where: { id } });
+        if (!event) return res.status(404).send("Event not found");
+        
+        const currentUserEvent = await prisma.eventUser.findFirst({
+            where: { eventId: id, userId: req.userId }
+        });
+        
+        if (!currentUserEvent || (currentUserEvent.role !== 'admin' && req.userId !== event.ownerId)) {
+            return res.status(403).send("Access denied");
+        }
+        
+        if (!['viewer', 'admin'].includes(role)) {
+            return res.status(400).send("Invalid role");
+        }
+        
+        await prisma.eventUser.updateMany({
+            where: { eventId: id, userId },
+            data: { role }
+        });
+        
+        await prisma.actionLog.create({
+            data: {
+                eventId: id,
+                userId: req.userId,
+                action: `role_change_to_${role}`,
+                fileName: `user_${userId}`
+            }
+        });
+        
+        res.redirect(`/files/${id}`);
+    });
+    
+    app.post("/files/:id/users/:userId/remove", async (req, res) => {
+        if (!req.userId) return res.redirect("/login");
+        const { id, userId } = req.params;
+        
+        const event = await prisma.events.findFirst({ where: { id } });
+        if (!event) return res.status(404).send("Event not found");
+        
+        const currentUserEvent = await prisma.eventUser.findFirst({
+            where: { eventId: id, userId: req.userId }
+        });
+        
+        if (!currentUserEvent || (currentUserEvent.role !== 'admin' && req.userId !== event.ownerId)) {
+            return res.status(403).send("Access denied");
+        }
+        
+        if (userId === event.ownerId) {
+            return res.status(400).send("Cannot remove event owner");
+        }
+        
+        const removedUser = await prisma.eventUser.findFirst({
+            where: { eventId: id, userId },
+            include: { user: true }
+        });
+        
+        await prisma.eventUser.deleteMany({
+            where: { eventId: id, userId }
+        });
+        
+        await prisma.actionLog.create({
+            data: {
+                eventId: id,
+                userId: req.userId,
+                action: 'user_removed',
+                fileName: `user_${userId}_${removedUser?.user?.email || 'unknown'}`
+            }
+        });
+        
+        res.redirect(`/files/${id}`);
+    });
+    
+    app.get("/files/:id/delete", async (req, res) => {
+        if (!req.userId) return res.redirect("/login");
+        const { id } = req.params;
+        const { fileName, fileId } = req.query;
+        
+        const eventUser = await prisma.eventUser.findFirst({
+            where: { eventId: id, userId: req.userId }
+        });
+        if (!eventUser) return res.status(403).send("Access denied");
+        
+        try {
+            await b2.authorize()
+            await b2.deleteFileVersion({
+                fileId,
+                fileName
+            });
+            
+            await prisma.actionLog.create({
+                data: {
+                    eventId: id,
+                    userId: req.userId,
+                    action: 'delete',
+                    fileName
+                }
+            });
+            
+        } catch (error) {
+            console.error("Delete error:", error);
+        }
+        
+        res.redirect(`/files/${id}`);
+    });
+    
     app.get("/api/lookup", async function (req, res) {
         const ms = +new Date()
         const { q } = req.query

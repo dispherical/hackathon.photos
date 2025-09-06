@@ -4,16 +4,59 @@
         <a href="/gallery/{{ id }}">&larr; Go Back</a>
     </small>
     <h1>Files for {{ title }}</h1>
-    {% if userRole == 'admin' %}
+    
+    {% if userRole == 'admin' or isOwner %}
+    <h2>Invite Users</h2>
     <form action="/files/{{ id }}/invite" method="POST">
         <input type="email" name="email" placeholder="Invite by email" required>
         <button type="submit">Invite</button>
     </form>
+    
+    <h2>Manage Users</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Added</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for eventUser in users %}
+            <tr>
+                <td>{{ eventUser.user.email }}</td>
+                <td>
+                    <form action="/files/{{ id }}/users/{{ eventUser.userId }}/role" method="POST" style="display: inline;">
+                        <select name="role" onchange="this.form.submit()">
+                            <option value="viewer" {% if eventUser.role == 'viewer' %}selected{% endif %}>Viewer</option>
+                            <option value="admin" {% if eventUser.role == 'admin' %}selected{% endif %}>Admin</option>
+                        </select>
+                    </form>
+                </td>
+                <td>{{ eventUser.createdAt.toLocaleDateString() }}</td>
+                <td>
+                    {% if eventUser.userId != ownerId %}
+                    <form action="/files/{{ id }}/users/{{ eventUser.userId }}/remove" method="POST" style="display: inline;" onsubmit="return confirm('Remove this user?')">
+                        <button type="submit" style="background: #ff4444; color: white; border: none; padding: 4px 8px; border-radius: 4px;">Remove</button>
+                    </form>
+                    {% else %}
+                    <span style="color: #666;">Owner</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
+    
+    <h2>Upload Files</h2>
     <form action="/files/{{ id }}/upload" method="POST" enctype="multipart/form-data">
         <input type="file" name="files" multiple accept="image/*">
         <button type="submit">Upload</button>
     </form>
+    
+    <h2>Files</h2>
     <table>
         <thead>
             <tr>
@@ -38,4 +81,34 @@
             {% endfor %}
         </tbody>
     </table>
+    
+    {% if userRole == 'admin' or isOwner %}
+    <details>
+        <summary><h2 style="display: inline;">Audit Logs ({{ auditLogs.length }} entries)</h2></summary>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>File</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in auditLogs %}
+                <tr>
+                    <td>{{ log.createdAt.toLocaleString() }}</td>
+                    <td>{{ log.user.email }}</td>
+                    <td>{{ log.action | replace("_", " ") | title }}</td>
+                    <td>{{ log.fileName }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">No audit logs yet</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endif %}
 {% endblock %}

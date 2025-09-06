@@ -51,6 +51,8 @@ model User {
     role      String
     requests  EventRequest[]
     ownedEvents Events[]
+    actionLogs ActionLog[]
+    eventUsers EventUser[]
 }
 
 model EventRequest {
@@ -68,6 +70,7 @@ model EventUser {
     eventId   String
     event     Events   @relation(fields: [eventId], references: [id])
     userId    String
+    user      User     @relation(fields: [userId], references: [id])
     role      String
     addedBy   String
     createdAt DateTime @default(now())
@@ -77,6 +80,7 @@ model ActionLog {
     id        String   @id @unique @default(cuid())
     eventId   String
     userId    String
+    user      User     @relation(fields: [userId], references: [id])
     action    String
     fileName  String
     createdAt DateTime @default(now())
