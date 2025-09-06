@@ -21,8 +21,10 @@ const { ChatOpenAI } = require("@langchain/openai");
 const { ChatPromptTemplate } = require('@langchain/core/prompts');
 const { createRetrievalChain } = require("langchain/chains/retrieval");
 const { createStuffDocumentsChain } = require("langchain/chains/combine_documents");
-const session = require('express-session');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const b2 = new B2({
     applicationKeyId: process.env.BACKBLAZE_APPKEY_ID,
     applicationKey: process.env.BACKBLAZE_APPKEY,
@@ -35,15 +37,18 @@ let embeddings = new OpenAIEmbeddings({
 });
 
 app.use(express.urlencoded({ extended: true }));
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'secret',
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false }
-}));
+app.use(cookieParser());
+
 app.use(async (req, res, next) => {
-    if (req.session.userId) {
-        req.user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+    const token = req.cookies.token;
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            req.userId = decoded.userId;
+            req.user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+        } catch (err) {
+            res.clearCookie('token');
+        }
     }
     res.locals.user = req.user;
     next();
@@ -162,32 +167,33 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
         if (!user) return res.status(400).send("User not found");
         await prisma.user.update({ where: { id: user.id }, data: { verified: true } });
         await prisma.magicToken.update({ where: { id: magicToken.id }, data: { used: true } });
-        req.session.userId = user.id;
+        const jwtToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        res.cookie('token', jwtToken, { httpOnly: true, secure: false });
         res.redirect("/dashboard");
     });
     app.get("/dashboard", async (req, res) => {
-        if (!req.session.userId) return res.redirect("/login");
-        const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
-        const events = await prisma.eventUser.findMany({ where: { userId: req.session.userId }, include: { event: true } });
+        if (!req.userId) return res.redirect("/login");
+        const user = await prisma.user.findUnique({ where: { id: req.userId } });
+        const events = await prisma.eventUser.findMany({ where: { userId: req.userId }, include: { event: true } });
         res.render("dashboard.njk", { ms: +new Date(), user, events });
     });
     app.get("/logout", (req, res) => {
-        req.session.destroy();
+        res.clearCookie('token');
         res.redirect("/");
     });
     app.get("/create-event", (req, res) => {
-        if (!req.session.userId) return res.redirect("/login");
+        if (!req.userId) return res.redirect("/login");
         res.render("create-event.njk", { ms: +new Date() });
     });
     app.post("/create-event", async (req, res) => {
-        if (!req.session.userId) return res.redirect("/login");
+        if (!req.userId) return res.redirect("/login");
         const { title, apiKey } = req.body;
         if (!title || !apiKey) return res.status(400).send("Title and API key required");
         await prisma.eventRequest.create({
             data: {
                 title,
                 apiKey,
-                requestedBy: req.session.userId
+                requestedBy: req.userId
             }
         });
         res.redirect("/dashboard");
@@ -242,7 +248,7 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
                 id,
                 title,
                 apiKey,
-                ownerId: req.session.userId || 'admin'
+                ownerId: req.userId || 'admin'
             }
         });
         res.redirect("/admin");
@@ -297,10 +303,10 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
         res.redirect("/admin");
     });
     app.get("/files/:id", async function (req, res) {
-        if (!req.session.userId) return res.redirect("/login");
+        if (!req.userId) return res.redirect("/login");
         const { id } = req.params;
         const eventUser = await prisma.eventUser.findFirst({
-            where: { eventId: id, userId: req.session.userId }
+            where: { eventId: id, userId: req.userId }
         });
         if (!eventUser) return res.status(403).send("Access denied");
         const event = await prisma.events.findFirst({
@@ -317,10 +323,10 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
     });
 
     app.post("/files/:id/upload", upload.array("files", 50), async function (req, res) {
-        if (!req.session.userId) return res.redirect("/login");
+        if (!req.userId) return res.redirect("/login");
         const { id } = req.params;
         const eventUser = await prisma.eventUser.findFirst({
-            where: { eventId: id, userId: req.session.userId }
+            where: { eventId: id, userId: req.userId }
         });
         if (!eventUser) return res.status(403).send("Access denied");
         await b2.authorize();
@@ -337,7 +343,7 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
                 await prisma.actionLog.create({
                     data: {
                         eventId: id,
-                        userId: req.session.userId,
+                        userId: req.userId,
                         action: 'add',
                         fileName
                     }
@@ -409,10 +415,10 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
         }
     });
     app.post("/files/:id/invite", async (req, res) => {
-        if (!req.session.userId) return res.redirect("/login");
+        if (!req.userId) return res.redirect("/login");
         const { id } = req.params;
         const eventUser = await prisma.eventUser.findFirst({
-            where: { eventId: id, userId: req.session.userId, role: 'admin' }
+            where: { eventId: id, userId: req.userId, role: 'admin' }
         });
         if (!eventUser) return res.status(403).send("Access denied");
         const { email } = req.body;
@@ -428,7 +434,7 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
                 eventId: id,
                 userId: user.id,
                 role: 'viewer',
-                addedBy: req.session.userId
+                addedBy: req.userId
             }
         });
         const token = crypto.randomBytes(32).toString('hex');
