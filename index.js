@@ -70,7 +70,7 @@ app.use(express.static('styles'));
 
 
     setInterval(function () { require("./exif") }, 60 * 1000 * 5)
-    setInterval(function () { require("./rclone") }, 60 * 1000 * 5)
+    //setInterval(function () { require("./rclone") }, 60 * 1000 * 5)
 
     const env = nunjucks.configure('views', {
         autoescape: true,
@@ -190,26 +190,39 @@ app.use(express.static('styles'));
         res.render("manager.njk", { ms, ...event, files });
     });
 
-    app.post("/files/:id/upload", upload.single("file"), basicAuth({
+    app.post("/files/:id/upload", upload.array("files", 50), basicAuth({
         authorizer: authorizer,
         authorizeAsync: true,
         challenge: true,
     }), async function (req, res) {
         await b2.authorize();
-        if (!req.file) return res.status(400).send("No file provided.");
+        if (!req.files || req.files.length === 0) return res.status(400).send("No files provided.");
         const { id } = req.params;
-        const fileName = `${id}/${req.file.originalname}`;
-        const data = fs.readFileSync(req.file.path);
-        const uploadUrlResponse = await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID });
-        await b2.uploadFile({
-            bucketId: process.env.BACKBLAZE_BUCKET_ID,
-            fileName,
-            data,
-            uploadUrl: uploadUrlResponse.data.uploadUrl,
-            uploadAuthToken: uploadUrlResponse.data.authorizationToken,
-        });
-        fs.unlinkSync(req.file.path);
-        res.redirect(`/files/${id}`);
+        
+        try {
+            for (const file of req.files) {
+                const fileName = `${id}/${file.originalname}`;
+                const data = fs.readFileSync(file.path);
+                const uploadUrlResponse = await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID });
+                await b2.uploadFile({
+                    bucketId: process.env.BACKBLAZE_BUCKET_ID,
+                    fileName,
+                    data,
+                    uploadUrl: uploadUrlResponse.data.uploadUrl,
+                    uploadAuthToken: uploadUrlResponse.data.authorizationToken,
+                });
+                fs.unlinkSync(file.path);
+            }
+            res.redirect(`/files/${id}`);
+        } catch (error) {
+            req.files.forEach(file => {
+                if (fs.existsSync(file.path)) {
+                    fs.unlinkSync(file.path);
+                }
+            });
+            console.error("Upload error:", error);
+            res.status(500).send("Upload failed. Please try again.");
+        }
     });
 
 
@@ -225,22 +238,18 @@ app.use(express.static('styles'));
             })
           );
         try {
-            // Fetch the EXIF data for the event
             const response = await fetch(`https://cdn.hackathon.photos/${id}/exif.json`);
             if (response.status >= 400) return res.json([]);
             const json = await response.json();
 
-            // Prepare documents for the vector store
             const docs = json.map(document => new Document({
                 pageContent: `${document.description}\n\nPath to image: ${document.image}`,
                 metadata: { id: document.md5Hash, image: document.image },
             }));
 
-            // Initialize the vector store and add documents
             const vectorStore = new MemoryVectorStore(embeddings);
             await vectorStore.addDocuments(docs);
 
-            // Initialize the LLM and RAG chain
             const llm = new ChatOpenAI({
                 modelName: "gpt-4o",
                 temperature: 0,
@@ -266,7 +275,8 @@ app.use(express.static('styles'));
                 combineDocsChain: questionAnswerChain,
             });
             const result = await ragChain.invoke({ input: q});
-            res.json(JSON.parse(result.answer));
+            console.log(result.answer.replace(/<think>[\s\S]*?<\/think>/, '').trim())
+            res.json(JSON.parse(result.answer.replace(/<think>[\s\S]*?<\/think>/, '').trim()));
         } catch (error) {
             console.error("Error in /api/:id/search:", error);
             res.status(500).json({ error: "An error occurred while processing your request." });

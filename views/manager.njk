@@ -5,7 +5,7 @@
     </small>
     <h1>Files for {{ title }}</h1>
     <form action="/files/{{ id }}/upload" method="POST" enctype="multipart/form-data">
-        <input type="file" name="file">
+        <input type="file" name="files" multiple accept="image/*">
         <button type="submit">Upload</button>
     </form>
     <table>
