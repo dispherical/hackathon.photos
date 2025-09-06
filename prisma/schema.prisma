@@ -14,8 +14,8 @@ model Events {
     active    Boolean  @default(true)
     title     String
     apiKey    String
-    ownerId   String
-    owner     User     @relation(fields: [ownerId], references: [id])
+    ownerId   String?
+    owner     User?    @relation(fields: [ownerId], references: [id])
     eventUsers EventUser[]
 }
 

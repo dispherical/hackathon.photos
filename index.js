@@ -248,7 +248,7 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
                 id,
                 title,
                 apiKey,
-                ownerId: req.userId || 'admin'
+                ownerId: req.userId
             }
         });
         res.redirect("/admin");
@@ -272,7 +272,7 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
         const { id } = req.params;
         const request = await prisma.eventRequest.findUnique({ where: { id } });
         if (!request) return res.status(404).send("Request not found");
-        const eventId = Math.random().toString(32).slice(2);
+        const eventId = request.title.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
         await prisma.events.create({
             data: {
                 id: eventId,
@@ -289,7 +289,7 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
                 addedBy: 'admin'
             }
         });
-        await prisma.eventRequest.update({ where: { id }, data: { approved: true } });
+        await prisma.eventRequest.delete({ where: { id } });
         res.redirect("/admin");
     });
     app.post("/admin/:id/delete", basicAuth({
@@ -299,7 +299,11 @@ Use the following link to login: https://hackathon.photos/verify/${token}`,
         challenge: true,
     }), async (req, res) => {
         const { id } = req.params;
+        
+        await prisma.actionLog.deleteMany({ where: { eventId: id } });
+        await prisma.eventUser.deleteMany({ where: { eventId: id } });
         await prisma.events.delete({ where: { id } });
+        
         res.redirect("/admin");
     });
     app.get("/files/:id", async function (req, res) {
