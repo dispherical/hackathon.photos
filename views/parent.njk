@@ -19,6 +19,13 @@
     <header>
       <nav>
         <a href="/" >Home</a>
+        {% if user %}
+        <a href="/dashboard">Dashboard</a>
+        <a href="/logout">Logout</a>
+        {% else %}
+        <a href="/register">Register</a>
+        <a href="/login">Login</a>
+        {% endif %}
       </nav>
       <h1>hackathon.photos</h1>
     </header>

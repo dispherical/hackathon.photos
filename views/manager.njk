@@ -4,6 +4,12 @@
         <a href="/gallery/{{ id }}">&larr; Go Back</a>
     </small>
     <h1>Files for {{ title }}</h1>
+    {% if userRole == 'admin' %}
+    <form action="/files/{{ id }}/invite" method="POST">
+        <input type="email" name="email" placeholder="Invite by email" required>
+        <button type="submit">Invite</button>
+    </form>
+    {% endif %}
     <form action="/files/{{ id }}/upload" method="POST" enctype="multipart/form-data">
         <input type="file" name="files" multiple accept="image/*">
         <button type="submit">Upload</button>

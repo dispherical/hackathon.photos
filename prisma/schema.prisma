@@ -14,6 +14,9 @@ model Events {
     active    Boolean  @default(true)
     title     String
     apiKey    String
+    ownerId   String
+    owner     User     @relation(fields: [ownerId], references: [id])
+    eventUsers EventUser[]
 }
 
 model Order {
@@ -38,4 +41,52 @@ model Photo {
     lat         Float?
     lon         Float?
     date        BigInt
+}
+
+model User {
+    id        String   @id @unique @default(cuid())
+    email     String   @unique
+    createdAt DateTime @default(now())
+    verified  Boolean  @default(false)
+    role      String
+    requests  EventRequest[]
+    ownedEvents Events[]
+}
+
+model EventRequest {
+    id          String   @id @unique @default(cuid())
+    title       String
+    apiKey      String
+    requestedBy String
+    user        User     @relation(fields: [requestedBy], references: [id])
+    approved    Boolean  @default(false)
+    createdAt   DateTime @default(now())
+}
+
+model EventUser {
+    id        String   @id @unique @default(cuid())
+    eventId   String
+    event     Events   @relation(fields: [eventId], references: [id])
+    userId    String
+    role      String
+    addedBy   String
+    createdAt DateTime @default(now())
+}
+
+model ActionLog {
+    id        String   @id @unique @default(cuid())
+    eventId   String
+    userId    String
+    action    String
+    fileName  String
+    createdAt DateTime @default(now())
+}
+
+model MagicToken {
+    id        String   @id @unique @default(cuid())
+    userId    String?
+    token     String   @unique
+    expiresAt DateTime
+    used      Boolean  @default(false)
+    createdAt DateTime @default(now())
 }

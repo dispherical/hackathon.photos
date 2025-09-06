@@ -21,6 +21,8 @@ const { ChatOpenAI } = require("@langchain/openai");
 const { ChatPromptTemplate } = require('@langchain/core/prompts');
 const { createRetrievalChain } = require("langchain/chains/retrieval");
 const { createStuffDocumentsChain } = require("langchain/chains/combine_documents");
+const session = require('express-session');
+const crypto = require('crypto');
 const b2 = new B2({
     applicationKeyId: process.env.BACKBLAZE_APPKEY_ID,
     applicationKey: process.env.BACKBLAZE_APPKEY,
@@ -33,6 +35,19 @@ let embeddings = new OpenAIEmbeddings({
 });
 
 app.use(express.urlencoded({ extended: true }));
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'secret',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false }
+}));
+app.use(async (req, res, next) => {
+    if (req.session.userId) {
+        req.user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+    }
+    res.locals.user = req.user;
+    next();
+});
 const cache = {};
 
 async function cachedListFileNames(bucketId, prefix) {
@@ -69,7 +84,7 @@ app.use(express.static('styles'));
 (async () => {
 
 
-    setInterval(function () { require("./exif") }, 60 * 1000 * 5)
+    //setInterval(function () { require("./exif") }, 60 * 1000 * 5)
     //setInterval(function () { require("./rclone") }, 60 * 1000 * 5)
 
     const env = nunjucks.configure('views', {
@@ -84,6 +99,98 @@ app.use(express.static('styles'));
     app.get("/", async function (req, res) {
         const ms = +new Date()
         res.render("index.njk", { ms });
+    });
+    app.get("/register", (req, res) => {
+        res.render("register.njk", { ms: +new Date() });
+    });
+    app.post("/register", async (req, res) => {
+        const { email } = req.body;
+        if (!email || !validator.isEmail(email)) return res.status(400).send("Invalid email");
+        let user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            user = await prisma.user.create({ data: { email, role: 'user' } });
+        }
+        const token = crypto.randomBytes(32).toString('hex');
+        await prisma.magicToken.create({
+            data: {
+                userId: user.id,
+                token,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+            }
+        });
+        await transporter.sendMail({
+            from: '"hackathon.photos" <noreply@hackathon.photos>',
+            to: email,
+            subject: "Verify your email",
+            text: `Welcome to hackathon.photos! 
+You can verify your E-mail here https://hackathon.photos/verify/${token}
+
+Note: if you didn't request this E-mail, you can disregard it.`,
+        });
+        res.render("magic-sent.njk", { ms: +new Date() });
+    });
+    app.get("/login", (req, res) => {
+        res.render("login.njk", { ms: +new Date() });
+    });
+    app.post("/login", async (req, res) => {
+        const { email } = req.body;
+        if (!email || !validator.isEmail(email)) return res.status(400).send("Invalid email");
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return res.status(400).send("User not found");
+        const token = crypto.randomBytes(32).toString('hex');
+        await prisma.magicToken.create({
+            data: {
+                userId: user.id,
+                token,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+            }
+        });
+        await transporter.sendMail({
+            from: '"hackathon.photos" <noreply@hackathon.photos>',
+            to: email,
+            subject: "Login to hackathon.photos",
+            text: `Welcome back to hackathon.photos!
+Use the following link to login: https://hackathon.photos/verify/${token}`,
+        });
+        res.render("magic-sent.njk", { ms: +new Date() });
+    });
+    app.get("/verify/:token", async (req, res) => {
+        const { token } = req.params;
+        const magicToken = await prisma.magicToken.findUnique({ where: { token } });
+        if (!magicToken || magicToken.used || magicToken.expiresAt < new Date()) return res.status(400).send("Invalid or expired token");
+        const user = await prisma.user.findUnique({ where: { id: magicToken.userId } });
+        if (!user) return res.status(400).send("User not found");
+        await prisma.user.update({ where: { id: user.id }, data: { verified: true } });
+        await prisma.magicToken.update({ where: { id: magicToken.id }, data: { used: true } });
+        req.session.userId = user.id;
+        res.redirect("/dashboard");
+    });
+    app.get("/dashboard", async (req, res) => {
+        if (!req.session.userId) return res.redirect("/login");
+        const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+        const events = await prisma.eventUser.findMany({ where: { userId: req.session.userId }, include: { event: true } });
+        res.render("dashboard.njk", { ms: +new Date(), user, events });
+    });
+    app.get("/logout", (req, res) => {
+        req.session.destroy();
+        res.redirect("/");
+    });
+    app.get("/create-event", (req, res) => {
+        if (!req.session.userId) return res.redirect("/login");
+        res.render("create-event.njk", { ms: +new Date() });
+    });
+    app.post("/create-event", async (req, res) => {
+        if (!req.session.userId) return res.redirect("/login");
+        const { title, apiKey } = req.body;
+        if (!title || !apiKey) return res.status(400).send("Title and API key required");
+        await prisma.eventRequest.create({
+            data: {
+                title,
+                apiKey,
+                requestedBy: req.session.userId
+            }
+        });
+        res.redirect("/dashboard");
     });
     app.get("/gallery/:id", async function (req, res) {
         const ms = +new Date();
@@ -122,16 +229,6 @@ app.use(express.static('styles'));
             .map(file => `https://cdn.hackathon.photos/${file.fileName}`);
         res.render("print.njk", { ms, id, photos, title: event.title });
     });
-    async function authorizer(username, password, cb) {
-        const event = await prisma.events.findFirst({
-            where: { id: username }
-        })
-        if (!event) return cb(null, false);
-        if (event.apiKey != password) return cb(null, false);
-
-        return cb(null, true);
-
-    }
     app.post("/admin/create", basicAuth({
         users: {
             'admin': process.env.ADMIN_PASSWORD,
@@ -144,7 +241,8 @@ app.use(express.static('styles'));
             data: {
                 id,
                 title,
-                apiKey
+                apiKey,
+                ownerId: req.session.userId || 'admin'
             }
         });
         res.redirect("/admin");
@@ -156,7 +254,37 @@ app.use(express.static('styles'));
         challenge: true,
     }), async (req, res) => {
         const events = await prisma.events.findMany();
-        res.render("admin.njk", { events });
+        const requests = await prisma.eventRequest.findMany({ include: { user: true } });
+        res.render("admin.njk", { events, requests });
+    });
+    app.post("/admin/requests/:id/approve", basicAuth({
+        users: {
+            'admin': process.env.ADMIN_PASSWORD,
+        },
+        challenge: true,
+    }), async (req, res) => {
+        const { id } = req.params;
+        const request = await prisma.eventRequest.findUnique({ where: { id } });
+        if (!request) return res.status(404).send("Request not found");
+        const eventId = Math.random().toString(32).slice(2);
+        await prisma.events.create({
+            data: {
+                id: eventId,
+                title: request.title,
+                apiKey: request.apiKey,
+                ownerId: request.requestedBy
+            }
+        });
+        await prisma.eventUser.create({
+            data: {
+                eventId,
+                userId: request.requestedBy,
+                role: 'admin',
+                addedBy: 'admin'
+            }
+        });
+        await prisma.eventRequest.update({ where: { id }, data: { approved: true } });
+        res.redirect("/admin");
     });
     app.post("/admin/:id/delete", basicAuth({
         users: {
@@ -168,58 +296,56 @@ app.use(express.static('styles'));
         await prisma.events.delete({ where: { id } });
         res.redirect("/admin");
     });
-    app.get("/files/:id", basicAuth({
-        authorizer: authorizer,
-        authorizeAsync: true,
-        challenge: true,
-    }), async function (req, res) {
-        const ms = +new Date()
-
+    app.get("/files/:id", async function (req, res) {
+        if (!req.session.userId) return res.redirect("/login");
         const { id } = req.params;
-
+        const eventUser = await prisma.eventUser.findFirst({
+            where: { eventId: id, userId: req.session.userId }
+        });
+        if (!eventUser) return res.status(403).send("Access denied");
         const event = await prisma.events.findFirst({
-            where: { id }
-        })
-        if (!event) return res.status(404).send("Event not found")
+            where: { id },
+        });
+        if (!event) return res.status(404).send("Event not found");
         await b2.authorize();
         const result = await b2.listFileNames({
             bucketId: process.env.BACKBLAZE_BUCKET_ID,
             prefix: `${id}/`
         });
-        const files = result.data.files
-        res.render("manager.njk", { ms, ...event, files });
+        const files = result.data.files;
+        res.render("manager.njk", { ms: +new Date(), ...event, files, userRole: eventUser.role });
     });
 
-    app.post("/files/:id/upload", upload.array("files", 50), basicAuth({
-        authorizer: authorizer,
-        authorizeAsync: true,
-        challenge: true,
-    }), async function (req, res) {
+    app.post("/files/:id/upload", upload.array("files", 50), async function (req, res) {
+        if (!req.session.userId) return res.redirect("/login");
+        const { id } = req.params;
+        const eventUser = await prisma.eventUser.findFirst({
+            where: { eventId: id, userId: req.session.userId }
+        });
+        if (!eventUser) return res.status(403).send("Access denied");
         await b2.authorize();
         if (!req.files || req.files.length === 0) return res.status(400).send("No files provided.");
-        const { id } = req.params;
-        
         try {
             for (const file of req.files) {
                 const fileName = `${id}/${file.originalname}`;
-                const data = fs.readFileSync(file.path);
-                const uploadUrlResponse = await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID });
                 await b2.uploadFile({
-                    bucketId: process.env.BACKBLAZE_BUCKET_ID,
+                    uploadUrl: (await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID })).data.uploadUrl,
+                    uploadAuthToken: (await b2.getUploadUrl({ bucketId: process.env.BACKBLAZE_BUCKET_ID })).data.authorizationToken,
                     fileName,
-                    data,
-                    uploadUrl: uploadUrlResponse.data.uploadUrl,
-                    uploadAuthToken: uploadUrlResponse.data.authorizationToken,
+                    data: fs.readFileSync(file.path)
                 });
-                fs.unlinkSync(file.path);
+                await prisma.actionLog.create({
+                    data: {
+                        eventId: id,
+                        userId: req.session.userId,
+                        action: 'add',
+                        fileName
+                    }
+                });
             }
             res.redirect(`/files/${id}`);
         } catch (error) {
-            req.files.forEach(file => {
-                if (fs.existsSync(file.path)) {
-                    fs.unlinkSync(file.path);
-                }
-            });
+            req.files.forEach(file => fs.unlinkSync(file.path));
             console.error("Upload error:", error);
             res.status(500).send("Upload failed. Please try again.");
         }
@@ -282,15 +408,44 @@ app.use(express.static('styles'));
             res.status(500).json({ error: "An error occurred while processing your request." });
         }
     });
-    app.get("/files/:id/delete", basicAuth({
-        authorizer: authorizer,
-        authorizeAsync: true,
-        challenge: true,
-    }), async function (req, res) {
-        await b2.authorize();
+    app.post("/files/:id/invite", async (req, res) => {
+        if (!req.session.userId) return res.redirect("/login");
         const { id } = req.params;
-        const { fileName, fileId } = req.query;
-        await b2.deleteFileVersion({ fileName, fileId });
+        const eventUser = await prisma.eventUser.findFirst({
+            where: { eventId: id, userId: req.session.userId, role: 'admin' }
+        });
+        if (!eventUser) return res.status(403).send("Access denied");
+        const { email } = req.body;
+        if (!email || !validator.isEmail(email)) return res.status(400).send("Invalid email");
+        let user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            user = await prisma.user.create({ data: { email, role: 'user' } });
+        }
+        const existing = await prisma.eventUser.findFirst({ where: { eventId: id, userId: user.id } });
+        if (existing) return res.status(400).send("User already invited");
+        await prisma.eventUser.create({
+            data: {
+                eventId: id,
+                userId: user.id,
+                role: 'viewer',
+                addedBy: req.session.userId
+            }
+        });
+        const token = crypto.randomBytes(32).toString('hex');
+        await prisma.magicToken.create({
+            data: {
+                userId: user.id,
+                token,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+            }
+        });
+        await transporter.sendMail({
+            from: '"hackathon.photos" <noreply@hackathon.photos>',
+            to: email,
+            subject: "You've been invited to manage photos",
+            text: `You've been invited to view files on hackathon.photos
+You van verify your E-mail by using the following link: https://hackathon.photos/verify/${token}`,
+        });
         res.redirect(`/files/${id}`);
     });
     app.get("/api/lookup", async function (req, res) {

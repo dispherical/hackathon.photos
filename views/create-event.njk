@@ -1,0 +1,9 @@
+{% extends "parent.njk" %}
+{% block main %}
+<h1>Create Event</h1>
+<form action="/create-event" method="POST">
+    <input type="text" name="title" placeholder="Event Title" required>
+    <input type="text" name="apiKey" placeholder="API Key" required>
+    <button type="submit">Request Event</button>
+</form>
+{% endblock %}

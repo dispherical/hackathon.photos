@@ -1,0 +1,13 @@
+{% extends "parent.njk" %}
+{% block main %}
+<h1>Dashboard</h1>
+<p>Welcome, {{ user.email }}</p>
+<a href="/create-event">Create Event</a>
+<h2>Your Events</h2>
+<ul>
+    {% for eventUser in events %}
+    <li><a href="/files/{{ eventUser.event.id }}">{{ eventUser.event.title }}</a> ({{ eventUser.role }})</li>
+    {% endfor %}
+</ul>
+<a href="/logout">Logout</a>
+{% endblock %}
