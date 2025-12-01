@@ -8,7 +8,7 @@
   "dependencies": {
     "@langchain/core": "^0.3.42",
     "@langchain/openai": "^0.4.5",
-    "@prisma/client": "^6.5.0",
+    "@prisma/client": "^6.6.0",
     "backblaze-b2": "^1.7.0",
     "canvas": "^3.1.0",
     "cookie-parser": "^1.4.7",
@@ -28,5 +28,11 @@
     "uuid": "^12.0.0",
     "validator": "^13.12.0",
     "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "prisma": "^6.6.0"
+  },
+  "scripts": {
+    "start": "npx prisma db push && bun ."
   }
 }
