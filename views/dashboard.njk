@@ -1,13 +1,38 @@
 {% extends "parent.njk" %}
 {% block main %}
 <h1>Dashboard</h1>
-<p>Welcome, {{ user.email }}</p>
-<a href="/create-event">Create Event</a>
+<p>Welcome, <strong>{{ user.email }}</strong></p>
+
+<div style="margin-bottom: 1rem;">
+    <a href="/create-event">+ Request New Event</a>
+</div>
+
 <h2>Your Events</h2>
-<ul>
-    {% for eventUser in events %}
-    <li><a href="/files/{{ eventUser.event.id }}">{{ eventUser.event.title }}</a> ({{ eventUser.role }})</li>
-    {% endfor %}
-</ul>
-<a href="/logout">Logout</a>
+{% if events.length === 0 %}
+    <p>You don't have any events yet. <a href="/create-event">Request one</a> to get started.</p>
+{% else %}
+<table>
+    <thead>
+        <tr>
+            <th>Event</th>
+            <th>Your Role</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for eventUser in events %}
+        <tr>
+            <td><strong>{{ eventUser.event.title }}</strong></td>
+            <td>{{ eventUser.role }}</td>
+            <td>
+                <a href="/gallery/{{ eventUser.event.id }}">Gallery</a> &bull;
+                <a href="/files/{{ eventUser.event.id }}">Manage</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<p style="margin-top: 2rem;"><a href="/logout">Logout</a></p>
 {% endblock %}

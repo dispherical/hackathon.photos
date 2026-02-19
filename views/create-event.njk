@@ -1,9 +1,15 @@
 {% extends "parent.njk" %}
 {% block main %}
-<h1>Create Event</h1>
+<h1>Request a New Event</h1>
+<p>Fill out the form below to request a new event. An admin will review and approve your request.</p>
 <form action="/create-event" method="POST">
-    <input type="text" name="title" placeholder="Event Title" required>
-    <input type="text" name="apiKey" placeholder="API Key" required>
-    <button type="submit">Request Event</button>
+    <label for="title">Event Title</label>
+    <input type="text" id="title" name="title" placeholder="e.g. HackMIT 2026" required>
+
+    <label for="apiKey">API Key</label>
+    <input type="text" id="apiKey" name="apiKey" placeholder="Your event's API key" required>
+    <small>This key will be used for programmatic access to your event's photos.</small>
+
+    <button type="submit">Submit Request</button>
 </form>
 {% endblock %}

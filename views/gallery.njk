@@ -18,6 +18,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
      crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <style>
         .gallery {
             display: grid;
@@ -50,10 +51,18 @@
     </div>
     <div id="searchResults" class="gallery"></div>
     <hr>
+    <div>
+        <select id="locationFilter">
+            <option value="">📍 Filter by location...</option>
+        </select>
+    </div>
+    <small>Uses location data from <a href="https://www.geonames.org">Geonames</a>.</small>
+    <div id="locationResults" class="gallery"></div>
+    <hr>
     <div class="gallery">
         {% for photo in photos %}
             <a href="{{ photo }}" target="_blank">
-                <img src="{{ photo }}" alt=""/>
+                <img src="{{ photo }}" alt="" loading="lazy"/>
             </a>
         {% else %}
             <p>No photos! Why not add some?</p>
@@ -85,12 +94,12 @@
 
                         results.forEach(result => {
                             const link = document.createElement('a');
-                            link.href = `https://cdn.hackathon.photos/${result.image}`;
+                            link.href = result.image;
                             link.target = '_blank';
 
                             const img = document.createElement('img');
-                            img.src = `https://cdn.hackathon.photos/${result.image}`;
-                            img.alt = result.pageContent;
+                            img.src = result.image;
+                            img.alt = '';
 
                             link.appendChild(img);
                             searchResultsContainer.appendChild(link);
@@ -101,38 +110,69 @@
                         alert('An error occurred while searching. Please try again later.');
                     });
             });
-        fetch("https://cdn.hackathon.photos/{{ id }}/exif.json")
-            .then(response => response.json())
-            .then(data => {
-                data.sort((a, b) => a.date - b.date);
 
-                const map = L
-                    .map('map')
-                    .setView([
-                        data[0].lat,
-                        data[0].lon
-                    ], 13);
+        (function() {
+            var photosWithCoords = {{ photosWithCoords | safe }};
 
-                L
-                    .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                        maxZoom: 21
+            var mapEl = document.getElementById('map');
+            if (!photosWithCoords || photosWithCoords.length === 0) {
+                mapEl.style.display = 'none';
+                document.querySelector('#map').previousElementSibling.style.display = 'none';
+                return;
+            }
+
+            var map = L.map('map').setView([photosWithCoords[0].lat, photosWithCoords[0].lon], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 21
+            }).addTo(map);
+
+            var heatPoints = photosWithCoords.map(function(p) { return [p.lat, p.lon, 1]; });
+            L.heatLayer(heatPoints, { minOpacity: 0.25, radius: 20, blur: 15, maxZoom: 17, max: 1.0, gradient: {0.2: 'blue', 0.4: 'lime', 0.6: 'yellow', 0.8: 'orange', 1.0: 'red'} }).addTo(map);
+
+            var bounds = photosWithCoords.map(function(p) { return [p.lat, p.lon]; });
+            if (bounds.length > 1) {
+                map.fitBounds(bounds);
+            }
+        })();
+
+        (function() {
+            var locations = {{ locations | safe }};
+            var select = document.getElementById('locationFilter');
+
+            locations.forEach(function(loc) {
+                var opt = document.createElement('option');
+                var label = loc.city + (loc.state ? ', ' + loc.state : '') + ', ' + loc.country;
+                opt.textContent = label + ' (' + loc.count + ')';
+                opt.value = JSON.stringify(loc);
+                select.appendChild(opt);
+            });
+
+            select.addEventListener('change', function() {
+                var container = document.getElementById('locationResults');
+                container.innerHTML = '';
+                if (!select.value) return;
+                var loc = JSON.parse(select.value);
+                var params = 'city=' + encodeURIComponent(loc.city) + '&country=' + encodeURIComponent(loc.country);
+                if (loc.state) params += '&state=' + encodeURIComponent(loc.state);
+                fetch('/api/{{ id }}/filter-location?' + params)
+                    .then(function(r) { return r.json(); })
+                    .then(function(results) {
+                        if (results.length === 0) { container.innerHTML = '<p>No photos found for this location.</p>'; return; }
+                        results.forEach(function(result) {
+                            var link = document.createElement('a');
+                            link.href = result.image;
+                            link.target = '_blank';
+                            var img = document.createElement('img');
+                            img.src = result.image;
+                            img.alt = '';
+                            img.loading = 'lazy';
+                            link.appendChild(img);
+                            container.appendChild(link);
+                        });
                     })
-                    .addTo(map);
-
-                const latlngs = [];
-                data.forEach(photo => {
-                    const marker = L
-                        .marker([photo.lat, photo.lon])
-                        .addTo(map);
-                    marker.bindPopup(`<a href="https://cdn.hackathon.photos/${photo.image}" target="_blank"><img src="https://cdn.hackathon.photos/${photo.image}" alt="" style="width: auto; height: auto;"></a>`);
-                    latlngs.push([photo.lat, photo.lon]);
-                });
-
-                L
-                    .polyline(latlngs, {color: 'blue'})
-                    .addTo(map);
-            })
-            .catch(error => console.error('Error fetching EXIF data:', error));
+                    .catch(function() { alert('Location filter failed. Please try again.'); });
+            });
+        })();
     </script>
 {% endblock %}

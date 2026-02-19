@@ -1,0 +1,54 @@
+{% extends "parent.njk" %}
+{% block main %}
+    <small><a href="/admin">&larr; Back to Admin</a></small>
+    <h1>Edit Event: {{ event.title }}</h1>
+
+    <form action="/admin/events/{{ event.id }}/edit" method="POST">
+        <label>Title</label>
+        <input type="text" name="title" value="{{ event.title }}" required>
+
+        <label>API Key</label>
+        <input type="text" name="apiKey" value="{{ event.apiKey }}" required>
+
+        <label>
+            <input type="checkbox" name="active" {% if event.active %}checked{% endif %}>
+            Active
+        </label>
+
+        <button type="submit">Save Changes</button>
+    </form>
+
+    <hr>
+
+    <h2>Event Details</h2>
+    <table>
+        <tr><td><strong>ID</strong></td><td><code>{{ event.id }}</code></td></tr>
+        <tr><td><strong>Created</strong></td><td>{{ event.createdAt.toLocaleDateString() }}</td></tr>
+        <tr><td><strong>Owner</strong></td><td>{{ event.owner.email if event.owner else 'None' }}</td></tr>
+        <tr><td><strong>Photos</strong></td><td>{{ event._count.photos }}</td></tr>
+        <tr><td><strong>Gallery URL</strong></td><td><a href="/gallery/{{ event.id }}">/gallery/{{ event.id }}</a></td></tr>
+        <tr><td><strong>Manager URL</strong></td><td><a href="/files/{{ event.id }}">/files/{{ event.id }}</a></td></tr>
+    </table>
+
+    <h2>Users ({{ event.eventUsers | length }})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Added</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for eu in event.eventUsers %}
+            <tr>
+                <td>{{ eu.user.email }}</td>
+                <td>{{ eu.role }}</td>
+                <td>{{ eu.createdAt.toLocaleDateString() }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">No users assigned</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

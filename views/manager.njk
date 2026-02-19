@@ -4,84 +4,155 @@
         <a href="/gallery/{{ id }}">&larr; Go Back</a>
     </small>
     <h1>Files for {{ title }}</h1>
-    
+
     {% if userRole == 'admin' or isOwner %}
-    <h2>Invite Users</h2>
-    <form action="/files/{{ id }}/invite" method="POST">
-        <input type="email" name="email" placeholder="Invite by email" required>
-        <button type="submit">Invite</button>
-    </form>
-    
-    <h2>Manage Users</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Added</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for eventUser in users %}
-            <tr>
-                <td>{{ eventUser.user.email }}</td>
-                <td>
-                    <form action="/files/{{ id }}/users/{{ eventUser.userId }}/role" method="POST" style="display: inline;">
-                        <select name="role" onchange="this.form.submit()">
-                            <option value="viewer" {% if eventUser.role == 'viewer' %}selected{% endif %}>Viewer</option>
-                            <option value="admin" {% if eventUser.role == 'admin' %}selected{% endif %}>Admin</option>
-                        </select>
-                    </form>
-                </td>
-                <td>{{ eventUser.createdAt.toLocaleDateString() }}</td>
-                <td>
-                    {% if eventUser.userId != ownerId %}
-                    <form action="/files/{{ id }}/users/{{ eventUser.userId }}/remove" method="POST" style="display: inline;" onsubmit="return confirm('Remove this user?')">
-                        <button type="submit" style="background: #ff4444; color: white; border: none; padding: 4px 8px; border-radius: 4px;">Remove</button>
-                    </form>
-                    {% else %}
-                    <span style="color: #666;">Owner</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <details>
+        <summary><h2 style="display: inline;">Team Management</h2></summary>
+
+        <h3>Invite Users</h3>
+        <form action="/files/{{ id }}/invite" method="POST">
+            <input type="email" name="email" placeholder="Invite by email" required>
+            <button type="submit">Invite</button>
+        </form>
+
+        <h3>Current Users</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Added</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for eventUser in users %}
+                <tr>
+                    <td>{{ eventUser.user.email }}</td>
+                    <td>
+                        <form action="/files/{{ id }}/users/{{ eventUser.userId }}/role" method="POST" style="display: inline;">
+                            <select name="role" onchange="this.form.submit()">
+                                <option value="viewer" {% if eventUser.role == 'viewer' %}selected{% endif %}>Viewer</option>
+                                <option value="admin" {% if eventUser.role == 'admin' %}selected{% endif %}>Admin</option>
+                            </select>
+                        </form>
+                    </td>
+                    <td>{{ eventUser.createdAt.toLocaleDateString() }}</td>
+                    <td>
+                        {% if eventUser.userId != ownerId %}
+                        <form action="/files/{{ id }}/users/{{ eventUser.userId }}/remove" method="POST" style="display: inline;" onsubmit="return confirm('Remove this user?')">
+                            <button type="submit" style="background: #ff4444; color: white; border: none; padding: 4px 8px; border-radius: 4px;">Remove</button>
+                        </form>
+                        {% else %}
+                        <span style="color: #666;">Owner</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
+
+    <details>
+        <summary><h2 style="display: inline;">Rclone Sync</h2></summary>
+        <p>Paste your rclone config below. It must contain a <code>[guest]</code> remote section. Files will be synced from <code>guest:</code> to this event's storage.</p>
+        <form action="/files/{{ id }}/rclone" method="POST">
+            <textarea name="rcloneConfig" rows="10" cols="60" placeholder="[guest]
+type = b2
+account = YOUR_ACCOUNT_ID
+key = YOUR_APP_KEY">{{ rcloneConfig }}</textarea>
+            <br>
+            <button type="submit">Save &amp; Sync</button>
+        </form>
+        <p><small>Shell metacharacters, <code>[host]</code> sections, and configs over 4KB are rejected for safety.</small></p>
+    </details>
     {% endif %}
-    
+
     <h2>Upload Files</h2>
     <form action="/files/{{ id }}/upload" method="POST" enctype="multipart/form-data">
         <input type="file" name="files" multiple accept="image/*">
         <button type="submit">Upload</button>
     </form>
-    
-    <h2>Files</h2>
+
+    <h2>Photos ({{ photos | length }})</h2>
+    <div style="margin-bottom: 10px;">
+        <button id="deleteSelected" disabled style="background: #ff4444; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer;">Delete Selected (<span id="selectedCount">0</span>)</button>
+    </div>
     <table>
         <thead>
             <tr>
+                <th><input type="checkbox" id="selectAll"></th>
                 <th>Preview</th>
                 <th>Filename</th>
-                <th>Delete</th>
+                <th>Size</th>
+                <th>Type</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
-            {% for file in files %}
+            {% for photo in photos %}
                 <tr>
-                    <td><img src="https://cdn.hackathon.photos/{{ file.fileName }}" alt="preview" width="100"></td>
+                    <td><input type="checkbox" class="photo-checkbox" data-id="{{ photo.id }}"></td>
+                    <td><img src="{{ photo.url }}" alt="preview" width="100" loading="lazy"></td>
                     <td>
-                        <a href="https://cdn.hackathon.photos/{{ file.fileName }}" target="_blank">{{file.fileName | replace(id, "")  | replace("/", "")}}</a>
+                        <a href="{{ photo.url }}" target="_blank">{{ photo.fileName }}</a>
                     </td>
+                    <td>{{ photo.size | filesize }}</td>
+                    <td>{{ photo.mimeType }}</td>
                     <td>
-                        <a href="/files/{{id}}/delete?fileName={{file.fileName|urlencode}}&fileId={{file.fileId|urlencode}}">Delete</a>
+                        <a href="/files/{{ id }}/delete?photoId={{ photo.id }}" onclick="return confirm('Delete this photo?')">Delete</a>
                     </td>
                 </tr>
             {% else %}
-                <p>No photos! Why not add some?</p>
+                <tr><td colspan="6">No photos yet. Upload some above!</td></tr>
             {% endfor %}
         </tbody>
     </table>
-    
+    <script>
+        (function() {
+            var checkboxes = document.querySelectorAll('.photo-checkbox');
+            var selectAll = document.getElementById('selectAll');
+            var deleteBtn = document.getElementById('deleteSelected');
+            var countSpan = document.getElementById('selectedCount');
+
+            function updateCount() {
+                var checked = document.querySelectorAll('.photo-checkbox:checked');
+                countSpan.textContent = checked.length;
+                deleteBtn.disabled = checked.length === 0;
+                selectAll.checked = checkboxes.length > 0 && checked.length === checkboxes.length;
+            }
+
+            selectAll.addEventListener('change', function() {
+                checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+                updateCount();
+            });
+
+            checkboxes.forEach(function(cb) { cb.addEventListener('change', updateCount); });
+
+            deleteBtn.addEventListener('click', function() {
+                var selected = Array.from(document.querySelectorAll('.photo-checkbox:checked')).map(function(cb) { return cb.dataset.id; });
+                if (selected.length === 0) return;
+                if (!confirm('Delete ' + selected.length + ' photo(s)? This cannot be undone.')) return;
+                deleteBtn.disabled = true;
+                deleteBtn.textContent = 'Deleting...';
+                fetch('/files/{{ id }}/delete-bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ photoIds: selected })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    window.location.reload();
+                })
+                .catch(function() {
+                    alert('Bulk delete failed. Please try again.');
+                    deleteBtn.disabled = false;
+                    deleteBtn.textContent = 'Delete Selected (' + selected.length + ')';
+                });
+            });
+        })();
+    </script>
+
     {% if userRole == 'admin' or isOwner %}
     <details>
         <summary><h2 style="display: inline;">Audit Logs ({{ auditLogs.length }} entries)</h2></summary>

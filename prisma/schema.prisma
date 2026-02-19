@@ -9,14 +9,16 @@ datasource db {
 }
 
 model Events {
-    id        String   @id @unique
-    createdAt DateTime @default(now())
-    active    Boolean  @default(true)
-    title     String
-    apiKey    String
-    ownerId   String?
-    owner     User?    @relation(fields: [ownerId], references: [id])
-    eventUsers EventUser[]
+    id           String      @id @unique
+    createdAt    DateTime    @default(now())
+    active       Boolean     @default(true)
+    title        String
+    apiKey       String
+    ownerId      String?
+    owner        User?       @relation(fields: [ownerId], references: [id])
+    rcloneConfig String?
+    eventUsers   EventUser[]
+    photos       Photo[]
 }
 
 model Order {
@@ -34,25 +36,43 @@ model Order {
 }
 
 model Photo {
-    id          String   @id @unique
+    id          String   @id @unique @default(cuid())
     createdAt   DateTime @default(now())
-    fileName    String   @unique
-    description String
+    fileName    String
+    url         String
+    description String   @default("")
     lat         Float?
     lon         Float?
-    date        BigInt
+    date        BigInt   @default(0)
+    size        Int      @default(0)
+    mimeType    String   @default("")
+    embeddings  Bytes?
+    city        String?
+    state       String?
+    country     String?
+    eventId     String
+    event       Events   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+    tags        Tag[]
+
+    @@unique([eventId, fileName])
+}
+
+model Tag {
+    id     String  @id @unique @default(cuid())
+    name   String  @unique
+    photos Photo[]
 }
 
 model User {
-    id        String   @id @unique @default(cuid())
-    email     String   @unique
-    createdAt DateTime @default(now())
-    verified  Boolean  @default(false)
-    role      String
-    requests  EventRequest[]
+    id          String         @id @unique @default(cuid())
+    email       String         @unique
+    createdAt   DateTime       @default(now())
+    verified    Boolean        @default(false)
+    role        String
+    requests    EventRequest[]
     ownedEvents Events[]
-    actionLogs ActionLog[]
-    eventUsers EventUser[]
+    actionLogs  ActionLog[]
+    eventUsers  EventUser[]
 }
 
 model EventRequest {
@@ -94,3 +114,32 @@ model MagicToken {
     used      Boolean  @default(false)
     createdAt DateTime @default(now())
 }
+
+model Geoname {
+  geonameId        Int      @id
+  name             String   @db.VarChar(200)
+  asciiName        String   @db.VarChar(200)
+  alternateNames   String?  @db.VarChar(10000)
+
+  latitude         Decimal  @db.Decimal(9, 6)
+  longitude        Decimal  @db.Decimal(9, 6)
+
+  featureClass     String   @db.Char(1)
+  featureCode      String   @db.VarChar(10)
+
+  countryCode      String   @db.Char(2)
+  cc2              String?  @db.VarChar(200)
+
+  admin1Code       String?  @db.VarChar(20)
+  admin2Code       String?  @db.VarChar(80)
+  admin3Code       String?  @db.VarChar(20)
+  admin4Code       String?  @db.VarChar(20)
+
+  population       BigInt?
+  elevation        Int?
+  dem              Int?
+
+  timezone         String?  @db.VarChar(40)
+  modificationDate DateTime @db.Date
+}
+

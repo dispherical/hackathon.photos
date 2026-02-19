@@ -1,46 +1,223 @@
 {% extends "parent.njk" %}
 {% block main %}
-    <main>
-        <h1>Admin Dashboard</h1>
+    <style>
+        .admin-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--accent);
+            margin-bottom: 1.5rem;
+        }
+        .admin-tabs button {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 1rem;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            color: var(--text-light);
+        }
+        .admin-tabs button.active {
+            border-bottom-color: var(--accent);
+            font-weight: bold;
+            color: var(--text);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .badge-green { background: #d4edda; color: #155724; }
+        .badge-red { background: #f8d7da; color: #721c24; }
+        .badge-blue { background: #cce5ff; color: #004085; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .stat-card h3 { margin: 0; font-size: 2rem; }
+        .stat-card p { margin: 0.25rem 0 0; }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-sm { font-size: 0.85rem; }
+        .inline-form { display: inline; }
+        .actions { display: flex; gap: 0.5rem; align-items: center; }
+    </style>
 
-        <section>
-            <h2>Create Event</h2>
-            <form action="/admin/create" method="POST">
-                <input type="text" name="title" placeholder="Title" required>
-                <input type="text" name="apiKey" placeholder="API Key" required>
-                <input type="text" name="id" placeholder="ID" required>
-                <button type="submit">Create</button>
-            </form>
-        </section>
+    <h1>Admin Dashboard</h1>
 
-        <section>
-            <h2>Pending Event Requests</h2>
-            {% for request in requests %}
-            <div style="border: 1px solid #ccc; padding: 1rem; margin: 1rem 0;">
-                <h3>{{ request.title }}</h3>
-                <p>Requested by: {{ request.user.email }}</p>
-                <p>Created: {{ request.createdAt }}</p>
-                <form action="/admin/requests/{{ request.id }}/approve" method="post" style="display:inline;">
-                    <button type="submit">Approve</button>
-                </form>
+    <div class="stats">
+        <div class="stat-card">
+            <h3>{{ events | length }}</h3>
+            <p>Events</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ requests | length }}</h3>
+            <p>Pending Requests</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ users | length }}</h3>
+            <p>Users</p>
+        </div>
+    </div>
+
+    <div class="admin-tabs">
+        <button class="active" onclick="switchTab('events', this)">Events</button>
+        <button onclick="switchTab('requests', this)">Requests ({{ requests | length }})</button>
+        <button onclick="switchTab('create', this)">Create Event</button>
+        <button onclick="switchTab('users', this)">Users</button>
+    </div>
+
+    <div id="tab-events" class="tab-content active">
+        {% if events.length === 0 %}
+            <p>No events yet.</p>
+        {% endif %}
+        {% for event in events %}
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <strong>{{ event.title }}</strong>
+                    <code style="margin-left: 0.5rem;">{{ event.id }}</code>
+                    {% if event.active %}
+                        <span class="badge badge-green">Active</span>
+                    {% else %}
+                        <span class="badge badge-red">Inactive</span>
+                    {% endif %}
+                </div>
+                <div class="actions">
+                    <a href="/gallery/{{ event.id }}">Gallery</a>
+                    <a href="/admin/events/{{ event.id }}/edit">Edit</a>
+                    <form action="/admin/{{ event.id }}/delete" method="post" class="inline-form" onsubmit="return confirm('Delete this event and all its photos?')">
+                        <button type="submit" class="btn-danger btn-sm">Delete</button>
+                    </form>
+                </div>
             </div>
-            {% else %}
-            <p>No pending requests</p>
-            {% endfor %}
-        </section>
+            <p>
+                {{ event._count.photos }} photos &bull;
+                {{ event._count.eventUsers }} users
+                {% if event.owner %} &bull; Owner: {{ event.owner.email }}{% endif %}
+                &bull; Created {{ event.createdAt.toLocaleDateString() }}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
 
-        <section>
-            <h2>All Events</h2>
-            <ul>
-                {% for event in events %}
-                    <li>
-                        <strong>{{ event.title }}</strong> (ID: {{ event.id }})
-                        <form action="/admin/{{ event.id }}/delete" method="post" style="display:inline;">
-                            <button type="submit">Delete</button>
-                        </form>
-                    </li>
+    <div id="tab-requests" class="tab-content">
+        {% if requests.length === 0 %}
+            <p>No pending requests.</p>
+        {% endif %}
+        {% for request in requests %}
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <strong>{{ request.title }}</strong>
+                    <span class="badge badge-blue">Pending</span>
+                </div>
+                <div class="actions">
+                    <form action="/admin/requests/{{ request.id }}/approve" method="post" class="inline-form">
+                        <button type="submit" class="btn-success btn-sm">Approve</button>
+                    </form>
+                    <form action="/admin/requests/{{ request.id }}/deny" method="post" class="inline-form" onsubmit="return confirm('Deny this request?')">
+                        <button type="submit" class="btn-danger btn-sm">Deny</button>
+                    </form>
+                </div>
+            </div>
+            <p>
+                Requested by: <strong>{{ request.user.email }}</strong> &bull;
+                API Key: <code>{{ request.apiKey }}</code> &bull;
+                {{ request.createdAt.toLocaleDateString() }}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div id="tab-create" class="tab-content">
+        <h2>Create Event</h2>
+        <form action="/admin/create" method="POST">
+            <label>Event Title</label>
+            <input type="text" name="title" placeholder="Hackathon 2026" required>
+            <label>Event ID (URL slug)</label>
+            <input type="text" name="id" placeholder="hackathon-2026" required pattern="[a-z0-9-]+">
+            <small>Lowercase letters, numbers, and hyphens only.</small>
+            <label>API Key</label>
+            <input type="text" name="apiKey" placeholder="API Key for this event" required>
+            <button type="submit">Create Event</button>
+        </form>
+    </div>
+
+    <div id="tab-users" class="tab-content">
+        <table>
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Verified</th>
+                    <th>Joined</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u.email }}</td>
+                    <td>{{ u.role }}</td>
+                    <td>
+                        {% if u.verified %}
+                            <span class="badge badge-green">Yes</span>
+                        {% else %}
+                            <span class="badge badge-red">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ u.createdAt.toLocaleDateString() }}</td>
+                </tr>
                 {% endfor %}
-            </ul>
-        </section>
-    </main>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function switchTab(name, btn) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.admin-tabs button').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            btn.classList.add('active');
+        }
+    </script>
 {% endblock %}
