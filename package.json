@@ -36,6 +36,6 @@
     "prisma": "^6.6.0"
   },
   "scripts": {
-    "start": "npx prisma db push && bun ."
+    "start": "bun x prisma generate && bun ."
   }
 }

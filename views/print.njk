@@ -23,7 +23,8 @@
             {% for photo in photos %}
                 <tr>
                     <td>
-                        <input type="checkbox" class="photo-checkbox" id="scales" name="scales"/></td>
+                        <input type="checkbox" class="photo-checkbox" id="scales" name="scales"/>
+                    </td>
                     <td>
                         <img src="{{ photo }}">
                     </td>
@@ -37,9 +38,13 @@
 
         </table>
     </details>
+    <h3>Select Product</h3>
+    <select id="product-select"></select>
+    <div id="product-details"></div>
     <h2>Order</h2>
     <p id="order-cost">Your order will be about $0.00</p>
     <input type="hidden" id="tax-percentage" value="0">
+    <input type="hidden" id="product-price" value="0">
     <label>Name</label>
     <input type="text" name="name" placeholder="John"/>
     <label>Surname</label>
@@ -76,36 +81,33 @@
         });
 
         async function lookupStores(query) {
-            const response = await fetch(`/api/lookup?q=${query}`);
+            const productId = document.querySelector('#product-select').value || '6560003';
+            const response = await fetch(`/api/lookup?q=${query}&productId=${productId}`);
             const data = await response.json();
             const storeSelect = document.querySelector('#store-select');
             storeSelect.innerHTML = '';
 
-            // Clear existing markers
             markers.forEach(marker => map.removeLayer(marker));
             markers = [];
 
-            data
-                .photoStores
-                .forEach(store => {
-                    const option = document.createElement('option');
-                    option.value = store.photoStoreDetails.storeNum;
-                    option.text = `${store.photoStoreDetails.storeName} - ${store.photoStoreDetails.street}, ${store.photoStoreDetails.city}, ${store.photoStoreDetails.state}`;
-                    option.dataset.details = JSON.stringify(store.photoStoreDetails);
-                    storeSelect.appendChild(option);
+            data.photoStores.forEach(store => {
+                const option = document.createElement('option');
+                option.value = store.photoStoreDetails.storeNum;
+                option.text = `${store.photoStoreDetails.storeName} - ${store.photoStoreDetails.street}, ${store.photoStoreDetails.city}, ${store.photoStoreDetails.state}`;
+                option.dataset.details = JSON.stringify(store.photoStoreDetails);
+                storeSelect.appendChild(option);
 
-                    // Add marker to map
-                    const marker = L
-                        .marker([store.photoStoreDetails.latitude, store.photoStoreDetails.longitude])
-                        .addTo(map)
-                        .bindPopup(`<b>${store.photoStoreDetails.storeName}</b><br>${store.photoStoreDetails.street}, ${store.photoStoreDetails.city}, ${store.photoStoreDetails.state}`);
-                    marker.on('click', () => {
-                        storeSelect.value = store.photoStoreDetails.storeNum;
-                        displayStoreDetails(store.photoStoreDetails);
-                        updateOrderCost();
-                    });
-                    markers.push(marker);
+                const marker = L
+                    .marker([store.photoStoreDetails.latitude, store.photoStoreDetails.longitude])
+                    .addTo(map)
+                    .bindPopup(`<b>${store.photoStoreDetails.storeName}</b><br>${store.photoStoreDetails.street}, ${store.photoStoreDetails.city}, ${store.photoStoreDetails.state}`);
+                marker.on('click', () => {
+                    storeSelect.value = store.photoStoreDetails.storeNum;
+                    displayStoreDetails(store.photoStoreDetails);
+                    updateOrderCost();
                 });
+                markers.push(marker);
+            });
 
             if (data.photoStores.length === 1) {
                 storeSelect.selectedIndex = 0;
@@ -172,7 +174,12 @@
 
         function updateOrderCost() {
             const selectedPhotos = getSelectedPhotos();
-            const costPerPhoto = 0.33;
+            let costPerPhoto = 0.33;
+            const productPriceElement = document.querySelector('#product-price');
+            if (productPriceElement) {
+                const val = parseFloat(productPriceElement.value);
+                if (!isNaN(val)) costPerPhoto = val;
+            }
             const totalCost = selectedPhotos.length * costPerPhoto;
 
             let taxPercentage = 0;
@@ -188,10 +195,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-
             const checkboxes = document.querySelectorAll('.photo-checkbox');
             const orderButton = document.querySelector("#order");
-
             function updateOrderButtonState() {
                 const anyChecked = Array
                     .from(checkboxes)
@@ -203,22 +208,18 @@
                 updateOrderButtonState()
             }, 500)
             updateOrderButtonState();
-
             checkboxes.forEach(checkbox => {
                 checkbox.addEventListener('change', () => {
                     updateOrderCost();
                     updateOrderButtonState();
                 });
             });
-
             const storeInput = document.querySelector('#store-input');
             const searchButton = document.querySelector('#search-button');
             const storeSelect = document.querySelector('#store-select');
-
             searchButton.addEventListener('click', () => {
                 lookupStores(storeInput.value);
             });
-
             storeSelect.addEventListener('change', () => {
                 const selectedOption = storeSelect.options[storeSelect.selectedIndex];
                 if (selectedOption && selectedOption.dataset.details) {
@@ -227,38 +228,54 @@
                     updateOrderCost();
                 }
             });
+
+            const productSelect = document.querySelector('#product-select');
+            const productDetailsDiv = document.querySelector('#product-details');
+            fetch('/api/products')
+                .then(res => res.json())
+                .then(data => {
+                    productSelect.innerHTML = '';
+                    data.products.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.productId;
+                        option.text = `${product.productDesc} (${product.productSize}) - $${parseFloat(product.productPrice).toFixed(2)}`;
+                        option.dataset.price = product.productPrice;
+                        option.dataset.desc = product.productDesc;
+                        option.dataset.size = product.productSize;
+                        productSelect.appendChild(option);
+                    });
+                    if (data.products.length > 0) {
+                        productSelect.selectedIndex = 0;
+                        updateProductDetails();
+                    }
+                });
+            function updateProductDetails() {
+                const selected = productSelect.options[productSelect.selectedIndex];
+                if (!selected) return;
+                document.querySelector('#product-price').value = selected.dataset.price;
+                productDetailsDiv.innerHTML = `<p><strong>${selected.dataset.desc}</strong> (${selected.dataset.size})<br>Price: $${parseFloat(selected.dataset.price).toFixed(2)}</p>`;
+                updateOrderCost();
+            }
+            productSelect.addEventListener('change', () => {
+                updateProductDetails();
+            });
         });
 
         async function submit() {
-            document
-                .querySelector("#order")
-                .disabled = true;
-            document
-                .querySelector("#order")
-                .innerText = "Ordering...";
-            const email = document
-                .querySelector('input[name="email"]')
-                .value;
-            const name = document
-                .querySelector('input[name="name"]')
-                .value;
-            const surname = document
-                .querySelector('input[name="surname"]')
-                .value;
-            const tel = document
-                .querySelector('input[name="tel"]')
-                .value;
+            document.querySelector("#order").disabled = true;
+            document.querySelector("#order").innerText = "Ordering...";
+            const email = document.querySelector('input[name="email"]').value;
+            const name = document.querySelector('input[name="name"]').value;
+            const surname = document.querySelector('input[name="surname"]').value;
+            const tel = document.querySelector('input[name="tel"]').value;
             const storeSelect = document.querySelector('#store-select');
             const storeNum = storeSelect.value;
             const selectedOption = storeSelect.options[storeSelect.selectedIndex];
-            const promiseTime = selectedOption
-                ? JSON
-                    .parse(selectedOption.dataset.details)
-                    .promiseTime
-                : '';
+            const promiseTime = selectedOption ? JSON.parse(selectedOption.dataset.details).promiseTime : '';
+            const productSelect = document.querySelector('#product-select');
+            const productId = productSelect.value;
             const agreements = (document.querySelector('input[name="agree1"]').checked && document.querySelector('input[name="agree2"]').checked);
-            if (!agreements) 
-                return alert("You must agree to all of the terms.");
+            if (!agreements) return alert("You must agree to all of the terms.");
             const params = new URLSearchParams({
                 photos: JSON.stringify(getSelectedPhotos()),
                 email: email,
@@ -266,38 +283,26 @@
                 surname: surname,
                 tel: tel,
                 storeNum: storeNum,
-                promiseTime: promiseTime
+                promiseTime: promiseTime,
+                productId: productId
             });
-
             fetch("/api/submit?" + params.toString())
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
                         alert(data.error)
-                        document
-                            .querySelector("#order")
-                            .disabled = false;
-                        document
-                            .querySelector("#order")
-                            .innerText = "Order";
+                        document.querySelector("#order").disabled = false;
+                        document.querySelector("#order").innerText = "Order";
                         return;
                     };
                     alert(data.message || "Check your E-mail to finish your order.");
-                    document
-                        .querySelector("#order")
-                        .disabled = false;
-                    document
-                        .querySelector("#order")
-                        .innerText = "Order";
+                    document.querySelector("#order").disabled = false;
+                    document.querySelector("#order").innerText = "Order";
                 })
                 .catch(error => {
                     alert("Something went wrong. Try again.")
-                    document
-                        .querySelector("#order")
-                        .disabled = false;
-                    document
-                        .querySelector("#order")
-                        .innerText = "Order";
+                    document.querySelector("#order").disabled = false;
+                    document.querySelector("#order").innerText = "Order";
                 });
         }
     </script>

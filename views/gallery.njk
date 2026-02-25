@@ -1,178 +1,234 @@
 {% extends "parent.njk" %}
 {% block main %}
-    <meta name="title" content="{{ title }} | hackathon.photos"/>
-    <meta name="description" content="{{ title }} has {{ photos | length }} photos on hackathon.photos - the free hackathon photo sharing service"/>
+  <meta name="title" content="{{ title }} | hackathon.photos"/>
+  <meta name="description" content="{{ title }} has {{ photos | length }} photos on hackathon.photos - the free hackathon photo sharing service"/>
 
-    <meta property="og:type" content="website"/>
-    <meta property="og:url" content="https://hackathon.photos/"/>
-    <meta property="og:title" content="{{ title }} | hackathon.photos"/>
-    <meta property="og:description" content="{{ title }} has {{ photos | length }} photos on hackathon.photos - the free hackathon photo sharing service"/>
+  <meta property="og:type" content="website"/>
+  <meta property="og:url" content="https://hackathon.photos/"/>
+  <meta property="og:title" content="{{ title }} | hackathon.photos"/>
+  <meta property="og:description" content="{{ title }} has {{ photos | length }} photos on hackathon.photos - the free hackathon photo sharing service"/>
 
-    <meta property="twitter:card" content="summary_large_image"/>
-    <meta property="twitter:url" content="https://hackathon.photos/"/>
-    <meta property="twitter:title" content="{{ title }} | hackathon.photos"/>
-    <meta property="twitter:description" content="{{ title }} has {{ photos | length }} photos on hackathon.photos - the free hackathon photo sharing service"/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  <meta property="twitter:card" content="summary_large_image"/>
+  <meta property="twitter:url" content="https://hackathon.photos/"/>
+  <meta property="twitter:title" content="{{ title }} | hackathon.photos"/>
+  <meta property="twitter:description" content="{{ title }} has {{ photos | length }} photos on hackathon.photos - the free hackathon photo sharing service"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
      crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
      crossorigin=""></script>
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-    <style>
-        .gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 10px;
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <style>
+    .gallery {
+      column-count: 4;
+      column-gap: 10px;
+    }
+
+    .gallery a {
+      display: inline-block;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    .gallery img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    @media (max-width: 1000px) {
+      .gallery {
+        column-count: 3;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .gallery {
+        column-count: 2;
+      }
+    }
+
+    @media (max-width: 500px) {
+      .gallery {
+        column-count: 1;
+      }
+    }
+  </style>
+  <h2>Gallery for {{ title }}</h2>
+  <!--<p>Want to print them out? <a href="/order/{{ id }}">Click here to order from Walgreens</a>. You can also <a href="/files/{{ id }}">upload and manage files here if you have an access token</a>.</p>-->
+  <h2>Map</h2>
+  <div id="map"></div>
+  <h2>Gallery</h2>
+  <div>
+    <input type="text" id="searchQuery" placeholder="🔎 Search photos"/>
+    <button id="searchButton">Search</button>
+  </div>
+  <div id="searchResults" class="gallery"></div>
+  <hr>
+  <div>
+    <select id="locationFilter">
+      <option value="">📍 Filter by location...</option>
+    </select>
+  </div>
+  <small>Uses location data from <a href="https://www.geonames.org">Geonames</a>.</small>
+  <div id="locationResults" class="gallery"></div>
+  <hr>
+  <div class="gallery">
+    {% for photo in photos %}
+      <a href="{{ photo }}" target="_blank">
+        <img src="{{ photo }}" alt="" loading="lazy"/>
+      </a>
+    {% else %}
+      <p>No photos! Why not add some?</p>
+    {% endfor %}
+  </div>
+  <script>
+    document
+      .getElementById('searchButton')
+      .addEventListener('click', () => {
+        const query = document
+          .getElementById('searchQuery')
+          .value
+          .trim();
+        if (!query) {
+          alert('Please enter a search query.');
+          return;
         }
-        .gallery img {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        @media (max-width: 600px) {
-            .gallery {
-                grid-template-columns: 1fr;
+
+        fetch(`/api/{{ id }}/search?q=${encodeURIComponent(query)}`)
+          .then(response => response.json())
+          .then(results => {
+            const searchResultsContainer = document.getElementById('searchResults');
+            searchResultsContainer.innerHTML = '';
+
+            if (results.length === 0) {
+              searchResultsContainer.innerHTML = '<p>No results found.</p>';
+              return;
             }
-        }
-        #map {
-            height: 400px;
-            margin-bottom: 20px;
-        }
-    </style>
-    <h2>Gallery for {{ title }}</h2>
-    <p>Want to print them out? <a href="/order/{{ id }}">Click here to order from Walgreens</a>. You can also <a href="/files/{{ id }}">upload and manage files here if you have an access token</a>.</p>
-    <h2>Map</h2>
-    <div id="map"></div>
-    <h2>Gallery</h2>
-    <div>
-        <input type="text" id="searchQuery" placeholder="🔮 Search using AI"/>
-        <button id="searchButton">Search</button>
-    </div>
-    <div id="searchResults" class="gallery"></div>
-    <hr>
-    <div>
-        <select id="locationFilter">
-            <option value="">📍 Filter by location...</option>
-        </select>
-    </div>
-    <small>Uses location data from <a href="https://www.geonames.org">Geonames</a>.</small>
-    <div id="locationResults" class="gallery"></div>
-    <hr>
-    <div class="gallery">
-        {% for photo in photos %}
-            <a href="{{ photo }}" target="_blank">
-                <img src="{{ photo }}" alt="" loading="lazy"/>
-            </a>
-        {% else %}
-            <p>No photos! Why not add some?</p>
-        {% endfor %}
-    </div>
-    <script>
+
+            results.forEach(result => {
+              const link = document.createElement('a');
+              link.href = result.image;
+              link.target = '_blank';
+
+              const img = document.createElement('img');
+              img.src = result.image;
+              img.alt = '';
+
+              link.appendChild(img);
+              searchResultsContainer.appendChild(link);
+            });
+          })
+          .catch(error => {
+            console.error('Error fetching search results:', error);
+            alert('An error occurred while searching. Please try again later.');
+          });
+      });
+
+    (function () {
+      var photosWithCoords = {{ photosWithCoords | safe }};
+
+      var mapEl = document.getElementById('map');
+      if (!photosWithCoords || photosWithCoords.length === 0) {
+        mapEl.style.display = 'none';
         document
-            .getElementById('searchButton')
-            .addEventListener('click', () => {
-                const query = document
-                    .getElementById('searchQuery')
-                    .value
-                    .trim();
-                if (!query) {
-                    alert('Please enter a search query.');
-                    return;
-                }
+          .querySelector('#map')
+          .previousElementSibling
+          .style
+          .display = 'none';
+        return;
+      }
 
-                fetch(`/api/{{ id }}/search?q=${encodeURIComponent(query)}`)
-                    .then(response => response.json())
-                    .then(results => {
-                        const searchResultsContainer = document.getElementById('searchResults');
-                        searchResultsContainer.innerHTML = '';
+      var map = L
+        .map('map')
+        .setView([
+          photosWithCoords[0].lat,
+          photosWithCoords[0].lon
+        ], 13);
+      L
+        .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 21
+        })
+        .addTo(map);
 
-                        if (results.length === 0) {
-                            searchResultsContainer.innerHTML = '<p>No results found.</p>';
-                            return;
-                        }
+      var heatPoints = photosWithCoords.map(function (p) {
+        return [p.lat, p.lon, 1];
+      });
+      L
+        .heatLayer(heatPoints, {
+          minOpacity: 0.25,
+          radius: 20,
+          blur: 15,
+          maxZoom: 17,
+          max: 1.0,
+          gradient: {
+            0.2: 'blue',
+            0.4: 'lime',
+            0.6: 'yellow',
+            0.8: 'orange',
+            1.0: 'red'
+          }
+        })
+        .addTo(map);
 
-                        results.forEach(result => {
-                            const link = document.createElement('a');
-                            link.href = result.image;
-                            link.target = '_blank';
+      var bounds = photosWithCoords.map(function (p) {
+        return [p.lat, p.lon];
+      });
+      if (bounds.length > 1) {
+        map.fitBounds(bounds);
+      }
+    })();
 
-                            const img = document.createElement('img');
-                            img.src = result.image;
-                            img.alt = '';
+    (function () {
+      var locations = {{ locations | safe }};
+      var select = document.getElementById('locationFilter');
 
-                            link.appendChild(img);
-                            searchResultsContainer.appendChild(link);
-                        });
-                    })
-                    .catch(error => {
-                        console.error('Error fetching search results:', error);
-                        alert('An error occurred while searching. Please try again later.');
-                    });
-            });
+      locations.forEach(function (loc) {
+        var opt = document.createElement('option');
+        var label = loc.city + (
+          loc.state
+          ? ', ' + loc.state
+          : '') + ', ' + loc.country;
+        opt.textContent = label + ' (' + loc.count + ')';
+        opt.value = JSON.stringify(loc);
+        select.appendChild(opt);
+      });
 
-        (function() {
-            var photosWithCoords = {{ photosWithCoords | safe }};
-
-            var mapEl = document.getElementById('map');
-            if (!photosWithCoords || photosWithCoords.length === 0) {
-                mapEl.style.display = 'none';
-                document.querySelector('#map').previousElementSibling.style.display = 'none';
-                return;
+      select.addEventListener('change', function () {
+        var container = document.getElementById('locationResults');
+        container.innerHTML = '';
+        if (!select.value) 
+          return;
+        var loc = JSON.parse(select.value);
+        var params = 'city=' + encodeURIComponent(loc.city) + '&country=' + encodeURIComponent(loc.country);
+        if (loc.state) 
+          params += '&state=' + encodeURIComponent(loc.state);
+        fetch('/api/{{ id }}/filter-location?' + params)
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (results) {
+            if (results.length === 0) {
+              container.innerHTML = '<p>No photos found for this location.</p>';
+              return;
             }
-
-            var map = L.map('map').setView([photosWithCoords[0].lat, photosWithCoords[0].lon], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 21
-            }).addTo(map);
-
-            var heatPoints = photosWithCoords.map(function(p) { return [p.lat, p.lon, 1]; });
-            L.heatLayer(heatPoints, { minOpacity: 0.25, radius: 20, blur: 15, maxZoom: 17, max: 1.0, gradient: {0.2: 'blue', 0.4: 'lime', 0.6: 'yellow', 0.8: 'orange', 1.0: 'red'} }).addTo(map);
-
-            var bounds = photosWithCoords.map(function(p) { return [p.lat, p.lon]; });
-            if (bounds.length > 1) {
-                map.fitBounds(bounds);
-            }
-        })();
-
-        (function() {
-            var locations = {{ locations | safe }};
-            var select = document.getElementById('locationFilter');
-
-            locations.forEach(function(loc) {
-                var opt = document.createElement('option');
-                var label = loc.city + (loc.state ? ', ' + loc.state : '') + ', ' + loc.country;
-                opt.textContent = label + ' (' + loc.count + ')';
-                opt.value = JSON.stringify(loc);
-                select.appendChild(opt);
+            results.forEach(function (result) {
+              var link = document.createElement('a');
+              link.href = result.image;
+              link.target = '_blank';
+              var img = document.createElement('img');
+              img.src = result.image;
+              img.alt = '';
+              img.loading = 'lazy';
+              link.appendChild(img);
+              container.appendChild(link);
             });
-
-            select.addEventListener('change', function() {
-                var container = document.getElementById('locationResults');
-                container.innerHTML = '';
-                if (!select.value) return;
-                var loc = JSON.parse(select.value);
-                var params = 'city=' + encodeURIComponent(loc.city) + '&country=' + encodeURIComponent(loc.country);
-                if (loc.state) params += '&state=' + encodeURIComponent(loc.state);
-                fetch('/api/{{ id }}/filter-location?' + params)
-                    .then(function(r) { return r.json(); })
-                    .then(function(results) {
-                        if (results.length === 0) { container.innerHTML = '<p>No photos found for this location.</p>'; return; }
-                        results.forEach(function(result) {
-                            var link = document.createElement('a');
-                            link.href = result.image;
-                            link.target = '_blank';
-                            var img = document.createElement('img');
-                            img.src = result.image;
-                            img.alt = '';
-                            img.loading = 'lazy';
-                            link.appendChild(img);
-                            container.appendChild(link);
-                        });
-                    })
-                    .catch(function() { alert('Location filter failed. Please try again.'); });
-            });
-        })();
-    </script>
+          })
+          .catch(function () {
+            alert('Location filter failed. Please try again.');
+          });
+      });
+    })();
+  </script>
 {% endblock %}

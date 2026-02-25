@@ -747,7 +747,12 @@ You can verify your E-mail by using the following link: https://hackathon.photos
     const results = await (await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}`)).json()
     if (!results || results.length === 0) return res.json([]);
     const { lat, lon } = results[0]
-    res.json(await utils.findStore(lat, lon))
+    const { productId } = req.query
+    res.json(await utils.findStore(lat, lon, productId))
+  });
+
+  app.get("/api/products", async function (req, res) {
+    res.json(await utils.getProducts())
   });
 
   app.get("/confirm/:id", async function (req, res) {

@@ -1,6 +1,6 @@
 
 module.exports = {
-    findStore: async function (lat, lon) {
+    findStore: async function (lat, lon, productId = '6560003') {
         const response = await fetch(`https://services${process.env.WALGREENS_SANDBOX_CODE||""}.walgreens.com/api/photo/store/v3`, {
             method: 'POST',
             headers: {
@@ -16,7 +16,7 @@ module.exports = {
                 devInf: 'Pixel 8 Pro',
                 productDetails: [
                     {
-                        productId: '6560003',
+                        productId: productId,
                         qty: '10'
                     }
                 ]
@@ -70,7 +70,7 @@ module.exports = {
                 devInf: "Pixel 8 Pro",
                 productDetails: [
                     {
-                        productId: "6560003",
+                        productId: order.productId || "6560003",
                         imageDetails:  order.photos.split(",").map(photo => {
                             return {
                                 qty: 1,
@@ -85,6 +85,34 @@ module.exports = {
         if (!response.ok)  throw new Error(`HTTP error! status: ${response.status}`);
 
         const data = await response.json();
+        return data;
+    },
+
+    getProducts: async function () {
+      console.log(`URL: https://services${process.env.WALGREENS_SANDBOX_CODE||""}.walgreens.com`);
+      console.log({
+                apiKey: process.env.WALGREENS_API_KEY,
+                affId: 'photoapi',
+                act: 'getphotoprods',
+                appVer: '1.0',
+                devInf: 'Pixel 8 Pro'
+            })
+        const response = await fetch(`https://services${process.env.WALGREENS_SANDBOX_CODE ? '-qa' : ''}.walgreens.com/api/photo/products/v3`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                apiKey: process.env.WALGREENS_API_KEY,
+                affId: 'photoapi',
+                act: 'getphotoprods',
+                appVer: '1.0',
+                devInf: 'Pixel 8 Pro'
+            })
+        });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        console.log(data)
         return data;
     },
 }
